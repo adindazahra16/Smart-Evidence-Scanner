@@ -22,6 +22,10 @@ function showMessage(id, message, color = "") {
   element.style.color = color;
 }
 
+// ===============================
+// MEMBACA DAN MENGUBAH FOTO
+// ===============================
+
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -33,46 +37,75 @@ function fileToDataURL(file) {
   });
 }
 
-function dataURLToFile(dataURL, filename) {
-  const parts = dataURL.split(",");
-  const mime = parts[0].match(/:(.*?);/)[1];
-  const binary = atob(parts[1]);
-  const array = new Uint8Array(binary.length);
-
-  for (let i = 0; i < binary.length; i++) {
-    array[i] = binary.charCodeAt(i);
-  }
-
-  return new File([array], filename, { type: mime });
-}
-
 async function compressForAI(file) {
   const dataURL = await fileToDataURL(file);
-  const image = new Image();
+  const image = await loadBrowserImage(dataURL);
 
-  await new Promise((resolve, reject) => {
-    image.onload = resolve;
-    image.onerror = () => reject(new Error("Foto tidak dapat dibuka."));
-    image.src = dataURL;
-  });
-
-  const maxWidth = 1600;
+  const maxWidth = 1200;
   const scale = Math.min(1, maxWidth / image.width);
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(image.width * scale);
   canvas.height = Math.round(image.height * scale);
 
-  const context = canvas.getContext("2d");
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  canvas.getContext("2d").drawImage(
+    image,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
 
-  const compressed = canvas.toDataURL("image/jpeg", 0.78);
+  const compressed = canvas.toDataURL("image/jpeg", 0.72);
 
   return {
     imageBase64: compressed.split(",")[1],
     mimeType: "image/jpeg"
   };
 }
+
+function loadBrowserImage(dataURL) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(
+      new Error("Foto tidak dapat dibuka.")
+    );
+
+    image.src = dataURL;
+  });
+}
+
+async function loadImage(file) {
+  const dataURL = await fileToDataURL(file);
+  const image = await loadBrowserImage(dataURL);
+
+  const maxWidth = 1400;
+  const scale = Math.min(1, maxWidth / image.width);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+
+  canvas.getContext("2d").drawImage(
+    image,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  return {
+    dataURL: canvas.toDataURL("image/jpeg", 0.82),
+    width: canvas.width,
+    height: canvas.height
+  };
+}
+
+// ===============================
+// PREVIEW FOTO
+// ===============================
 
 function renderReceiptPreview() {
   const container = $("receipt-preview");
@@ -103,11 +136,13 @@ function renderSupportingPreview() {
 
   if (!supportingFiles.length) {
     container.textContent = "Belum ada foto dokumentasi.";
+    showMessage("supporting-message", "");
     return;
   }
 
   supportingFiles.forEach((file, index) => {
     const wrapper = document.createElement("div");
+
     wrapper.style.display = "inline-flex";
     wrapper.style.flexDirection = "column";
     wrapper.style.margin = "8px";
@@ -152,6 +187,10 @@ function addSupportingFiles(files) {
   renderSupportingPreview();
 }
 
+// ===============================
+// KAMERA
+// ===============================
+
 function stopCamera() {
   if (cameraStream) {
     cameraStream.getTracks().forEach(track => track.stop());
@@ -178,6 +217,10 @@ async function openCamera(target) {
       return;
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Browser tidak mendukung akses kamera.");
+    }
+
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" }
@@ -193,7 +236,7 @@ async function openCamera(target) {
 
   } catch (error) {
     alert(
-      "Kamera tidak dapat dibuka. Pastikan izin kamera diberikan dan gunakan HTTPS."
+      "Kamera tidak dapat dibuka. Periksa izin kamera dan koneksi HTTPS."
     );
   }
 }
@@ -244,8 +287,13 @@ function takePhoto(target) {
     }
 
     stopCamera();
-  }, "image/jpeg", 0.92);
+
+  }, "image/jpeg", 0.9);
 }
+
+// ===============================
+// HASIL SCAN AI
+// ===============================
 
 function updateBBMFields() {
   const category = $("kategori")?.value || "";
@@ -272,6 +320,7 @@ function fillScanResult(data) {
 
   fields.forEach(field => {
     const element = $(field);
+
     if (element && data[field] !== undefined) {
       element.value = data[field] ?? "";
     }
@@ -319,8 +368,15 @@ function updateTelegramCaption() {
   }
 
   const caption = $("telegram-caption");
-  if (caption) caption.value = lines.join("\n");
+
+  if (caption) {
+    caption.value = lines.join("\n");
+  }
 }
+
+// ===============================
+// KIRIM FOTO KE GOOGLE APPS SCRIPT
+// ===============================
 
 function sendToBackend(payload) {
   return new Promise((resolve, reject) => {
@@ -354,6 +410,7 @@ function sendToBackend(payload) {
 
     const finish = (callback, result) => {
       if (finished) return;
+
       finished = true;
       cleanup();
       callback(result);
@@ -370,10 +427,7 @@ function sendToBackend(payload) {
         }
       }
 
-      if (
-        !result ||
-        typeof result.success !== "boolean"
-      ) {
+      if (!result || typeof result.success !== "boolean") {
         return;
       }
 
@@ -387,14 +441,15 @@ function sendToBackend(payload) {
       }
     };
 
+    // Apps Script dapat membutuhkan waktu beberapa menit.
     const timeout = setTimeout(() => {
       finish(
         reject,
         new Error(
-          "Waktu pemeriksaan habis. Silakan coba lagi."
+          "Waktu pemeriksaan habis. Periksa status eksekusi Apps Script."
         )
       );
-    }, 150000);
+    }, 360000);
 
     window.addEventListener("message", onMessage);
 
@@ -452,22 +507,58 @@ async function scanReceipt() {
   }
 }
 
-async function loadImage(file) {
-  const dataURL = await fileToDataURL(file);
-  const image = new Image();
+// ===============================
+// MEMUAT LIBRARY PDF
+// ===============================
 
-  await new Promise((resolve, reject) => {
-    image.onload = resolve;
-    image.onerror = reject;
-    image.src = dataURL;
-  });
+function loadPDFLibrary() {
+  if (window.jspdf?.jsPDF) {
+    return Promise.resolve(window.jspdf.jsPDF);
+  }
 
-  return {
-    dataURL,
-    width: image.width,
-    height: image.height
-  };
+  if (window.pdfLibraryLoading) {
+    return window.pdfLibraryLoading;
+  }
+
+  const sources = [
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
+    "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"
+  ];
+
+  window.pdfLibraryLoading = (async () => {
+    for (const source of sources) {
+      try {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+
+          script.src = source;
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = reject;
+
+          document.head.appendChild(script);
+        });
+
+        if (window.jspdf?.jsPDF) {
+          return window.jspdf.jsPDF;
+        }
+
+      } catch (error) {
+        console.warn("Library PDF gagal dimuat:", source);
+      }
+    }
+
+    throw new Error(
+      "Library PDF tidak dapat dimuat. Periksa koneksi internet."
+    );
+  })();
+
+  return window.pdfLibraryLoading;
 }
+
+// ===============================
+// MEMBUAT PDF A4 SATU HALAMAN
+// ===============================
 
 function fitImage(doc, image, x, y, maxWidth, maxHeight) {
   const ratio = Math.min(
@@ -494,31 +585,30 @@ async function createPDF() {
     return;
   }
 
-  if (!window.jspdf?.jsPDF) {
-    alert("Fitur PDF belum tersedia. Periksa koneksi internet.");
-    return;
-  }
-
   const button = $("pdf-button");
 
   try {
     button.disabled = true;
     button.textContent = "Membuat PDF...";
 
-    const { jsPDF } = window.jspdf;
+    showMessage("pdf-message", "Sedang membuat dokumen PDF...");
+
+    const jsPDF = await loadPDFLibrary();
+
     const doc = new jsPDF("p", "mm", "a4");
 
     const pageWidth = 210;
+    const pageHeight = 297;
     const margin = 12;
     const contentWidth = pageWidth - margin * 2;
 
     let y = 12;
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
+    doc.setFontSize(14);
     doc.text("DOKUMENTASI BUKTI PENGELUARAN", margin, y);
 
-    y += 9;
+    y += 8;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
@@ -534,12 +624,12 @@ async function createPDF() {
       margin,
       y,
       contentWidth,
-      83
+      78
     );
 
-    y += 88;
+    y += 82;
 
-    doc.setFont("helvetica", "normal");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.text("Dokumentasi Kegiatan", margin, y);
 
@@ -548,7 +638,7 @@ async function createPDF() {
     const photos = supportingFiles.slice(0, 4);
     const gap = 4;
     const cellWidth = (contentWidth - gap) / 2;
-    const cellHeight = 34;
+    const cellHeight = 30;
 
     for (let i = 0; i < photos.length; i++) {
       const image = await loadImage(photos[i]);
@@ -569,27 +659,31 @@ async function createPDF() {
       );
     }
 
-    y += photos.length ? 2 * (cellHeight + gap) : 0;
+    if (photos.length) {
+      y += 2 * (cellHeight + gap);
+    }
+
     y += 3;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.text("Uraian Kegiatan", margin, y);
 
-    y += 6;
+    y += 5;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
 
-    const activity = $("kegiatan")?.value?.trim()
-      || "Uraian kegiatan belum diisi.";
+    const activity =
+      $("kegiatan")?.value?.trim() ||
+      "Uraian kegiatan belum diisi.";
 
     const lines = doc.splitTextToSize(
       activity,
       contentWidth
     );
 
-    const availableHeight = 297 - y - 12;
+    const availableHeight = pageHeight - margin - y;
     const maxLines = Math.max(
       1,
       Math.floor(availableHeight / 4.5)
@@ -600,13 +694,19 @@ async function createPDF() {
     doc.save("Dokumentasi-Bukti-Pengeluaran.pdf");
 
     showMessage(
-      "supporting-message",
-      "PDF berhasil dibuat."
+      "pdf-message",
+      "PDF berhasil dibuat.",
+      "green"
     );
 
   } catch (error) {
     console.error(error);
-    alert("Gagal membuat PDF: " + error.message);
+
+    showMessage(
+      "pdf-message",
+      error.message || "Gagal membuat PDF.",
+      "red"
+    );
 
   } finally {
     button.disabled = false;
@@ -614,16 +714,48 @@ async function createPDF() {
   }
 }
 
+// ===============================
+// UNDUH FOTO
+// ===============================
+
+function downloadFile(file, index) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download =
+    file.name || "dokumentasi-" + (index + 1) + ".jpg";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+// ===============================
+// TERUSKAN KE TELEGRAM
+// ===============================
+
 async function sendToTelegram() {
   if (!receiptFile) {
     alert("Foto nota belum dipilih.");
     return;
   }
 
+  const button = $("telegram-button");
   const caption = $("telegram-caption")?.value || "";
-  const files = [receiptFile, ...supportingFiles];
+
+  const files = [
+    receiptFile,
+    ...supportingFiles
+  ];
 
   try {
+    button.disabled = true;
+    button.textContent = "Menyiapkan dokumentasi...";
+
+    // Pilihan pertama: menu berbagi perangkat.
     if (
       navigator.share &&
       navigator.canShare &&
@@ -632,66 +764,66 @@ async function sendToTelegram() {
       await navigator.share({
         title: "Dokumentasi Bukti Pengeluaran",
         text: caption,
-        files
+        files: files
       });
+
+      showMessage(
+        "telegram-message",
+        "Menu berbagi berhasil dibuka. Pilih Telegram jika tersedia.",
+        "green"
+      );
 
       return;
     }
 
-    for (let i = 0; i < files.length; i++) {
-      const url = URL.createObjectURL(files[i]);
-      const link = document.createElement("a");
+    // Pilihan kedua: unduh foto dan salin keterangan.
+    files.forEach((file, index) => {
+      downloadFile(file, index);
+    });
 
-      link.href = url;
-      link.download = files[i].name || `dokumentasi-${i + 1}.jpg`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    }
-
-    if (navigator.clipboard?.writeText) {
+    try {
       await navigator.clipboard.writeText(caption);
+      showMessage(
+        "telegram-message",
+        "Foto diunduh dan keterangan berhasil disalin. Membuka Telegram..."
+      );
+    } catch (error) {
+      showMessage(
+        "telegram-message",
+        "Foto diunduh. Salin keterangan secara manual dari kolom pesan."
+      );
     }
 
+    // Membuka halaman berbagi Telegram.
     const telegramURL =
       "https://t.me/share/url?url=&text=" +
       encodeURIComponent(caption);
 
     window.open(telegramURL, "_blank");
 
-    alert(
-      "Foto sudah diunduh dan keterangan disalin jika izin clipboard tersedia. Lampirkan foto di Telegram."
-    );
-
   } catch (error) {
     if (error.name !== "AbortError") {
-      alert("Tidak dapat membuka fitur berbagi: " + error.message);
+      console.error(error);
+
+      showMessage(
+        "telegram-message",
+        "Gagal membuka fitur berbagi: " + error.message,
+        "red"
+      );
     }
+
+  } finally {
+    button.disabled = false;
+    button.textContent = "Teruskan ke Telegram";
   }
 }
 
-function createPDFButton() {
-  if ($("pdf-button")) return;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.id = "pdf-button";
-  button.textContent = "Buat PDF A4";
-
-  button.addEventListener("click", createPDF);
-
-  const section = $("supporting-message")?.closest(".card")
-    || $("telegram-button")?.closest(".card");
-
-  if (section) {
-    section.appendChild(button);
-  }
-}
+// ===============================
+// INISIALISASI APLIKASI
+// ===============================
 
 function initializeApp() {
+
   $("receipt-camera-button")?.addEventListener(
     "click",
     () => openCamera("receipt")
@@ -787,20 +919,25 @@ function initializeApp() {
     );
   });
 
+  $("pdf-button")?.addEventListener("click", createPDF);
+
   $("telegram-button")?.addEventListener(
     "click",
     sendToTelegram
   );
 
-  createPDFButton();
   updateBBMFields();
   renderReceiptPreview();
   renderSupportingPreview();
 
   showMessage(
     "server-status",
-    "Aplikasi siap digunakan."
+    "Aplikasi siap digunakan.",
+    "green"
   );
 }
 
-document.addEventListener("DOMContentLoaded", initializeApp);
+document.addEventListener(
+  "DOMContentLoaded",
+  initializeApp
+);
