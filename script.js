@@ -798,100 +798,92 @@ function downloadFile(file, index) {
   }, 15000);
 }
 
-// ===============================
-// TERUSKAN KE TELEGRAM DESKTOP
-// ===============================
+
+ // ===============================
+ // SALIN KETERANGAN UNTUK TELEGRAM
+ // ===============================
 
 async function sendToTelegram() {
-  if (!receiptFile) {
-    alert("Foto nota belum dipilih.");
-    return;
-  }
-
   const button = $("telegram-button");
-  const caption = $("telegram-caption")?.value || "";
-
-  const files = [
-    receiptFile,
-    ...supportingFiles
-  ];
 
   if (!button) {
     alert("Tombol Telegram tidak ditemukan.");
     return;
   }
 
-  button.disabled = true;
-  button.textContent = "Menyiapkan dokumentasi...";
+  // Perbarui keterangan berdasarkan isian terbaru
+  updateTelegramCaption();
 
-  // Mencoba membuka aplikasi Telegram.
-  // Browser atau Windows mungkin meminta izin.
-  const telegramAppURL =
-    "tg://msg?text=" + encodeURIComponent(caption);
+  const captionElement = $("telegram-caption");
+  const caption = captionElement?.value?.trim() || "";
 
-  let telegramWindow = null;
-
-  try {
-    telegramWindow = window.open(
-      telegramAppURL,
-      "_blank"
+  if (!caption) {
+    showMessage(
+      "telegram-message",
+      "Keterangan masih kosong.",
+      "red"
     );
-  } catch (error) {
-    console.warn("Telegram Desktop tidak dapat dibuka:", error);
+    return;
   }
 
-  try {
-    // Unduh semua foto.
-    files.forEach((file, index) => {
-      downloadFile(file, index);
-    });
+  button.disabled = true;
+  button.textContent = "Menyalin Keterangan...";
 
-    // Salin keterangan.
+  try {
     let copied = false;
 
-    try {
-      await navigator.clipboard.writeText(caption);
-      copied = true;
-    } catch (error) {
-      console.warn("Gagal menyalin keterangan:", error);
+    // Cara utama: Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(caption);
+        copied = true;
+      } catch (error) {
+        console.warn("Clipboard API gagal:", error);
+      }
     }
 
-    if (telegramWindow) {
+    // Cara cadangan jika Clipboard API gagal
+    if (!copied) {
+      const temporaryInput = document.createElement("textarea");
+
+      temporaryInput.value = caption;
+      temporaryInput.style.position = "fixed";
+      temporaryInput.style.left = "-9999px";
+      temporaryInput.style.top = "0";
+
+      document.body.appendChild(temporaryInput);
+      temporaryInput.focus();
+      temporaryInput.select();
+      temporaryInput.setSelectionRange(
+        0,
+        temporaryInput.value.length
+      );
+
+      copied = document.execCommand("copy");
+
+      temporaryInput.remove();
+    }
+
+    if (copied) {
       showMessage(
         "telegram-message",
-        copied
-          ? "Foto diunduh dan keterangan disalin. Jika Telegram terbuka, lampirkan foto dan tempel keterangan."
-          : "Foto diunduh. Salin keterangan dari kolom pesan."
+        "Keterangan berhasil disalin! Buka Telegram Desktop, pilih penerima, lalu tekan Ctrl + V.",
+        "green"
       );
     } else {
       showMessage(
         "telegram-message",
-        "Foto diunduh. Browser tidak membuka aplikasi Telegram otomatis."
+        "Gagal menyalin otomatis. Silakan salin keterangan dari kolom pesan.",
+        "red"
       );
-
-      const message = $("telegram-message");
-
-      if (message) {
-        const link = document.createElement("a");
-
-        link.href =
-          "https://t.me/share/url?url=&text=" +
-          encodeURIComponent(caption);
-
-        link.target = "_blank";
-        link.rel = "noopener";
-        link.textContent = " Buka Telegram Web";
-
-        message.appendChild(link);
-      }
     }
 
   } catch (error) {
-    console.error("TELEGRAM ERROR:", error);
+    console.error("COPY ERROR:", error);
 
     showMessage(
       "telegram-message",
-      "Gagal menyiapkan dokumentasi: " + error.message,
+      "Gagal menyalin keterangan. Silakan coba lagi.",
       "red"
     );
 
