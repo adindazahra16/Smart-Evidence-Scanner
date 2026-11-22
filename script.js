@@ -14,16 +14,23 @@ const receiptCameraInput = $("receipt-camera");
 const supportingInput = $("supporting-gallery");
 const supportingCameraInput = $("supporting-camera");
 
+// ===============================
+// PESAN STATUS
+// ===============================
+
 function showMessage(id, message, color = "") {
   const element = $(id);
   if (!element) return;
 
   element.textContent = message;
-  element.style.color = color;
+
+  if (color) {
+    element.style.color = color;
+  }
 }
 
 // ===============================
-// MEMBACA DAN MENGUBAH FOTO
+// MEMBACA FOTO
 // ===============================
 
 function fileToDataURL(file) {
@@ -35,33 +42,6 @@ function fileToDataURL(file) {
 
     reader.readAsDataURL(file);
   });
-}
-
-async function compressForAI(file) {
-  const dataURL = await fileToDataURL(file);
-  const image = await loadBrowserImage(dataURL);
-
-  const maxWidth = 1200;
-  const scale = Math.min(1, maxWidth / image.width);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.width * scale);
-  canvas.height = Math.round(image.height * scale);
-
-  canvas.getContext("2d").drawImage(
-    image,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  const compressed = canvas.toDataURL("image/jpeg", 0.72);
-
-  return {
-    imageBase64: compressed.split(",")[1],
-    mimeType: "image/jpeg"
-  };
 }
 
 function loadBrowserImage(dataURL) {
@@ -77,6 +57,39 @@ function loadBrowserImage(dataURL) {
   });
 }
 
+async function compressForAI(file) {
+  const dataURL = await fileToDataURL(file);
+  const image = await loadBrowserImage(dataURL);
+
+  const maxWidth = 1200;
+  const scale = Math.min(1, maxWidth / image.width);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Gagal memproses foto.");
+  }
+
+  context.drawImage(
+    image,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const compressed = canvas.toDataURL("image/jpeg", 0.72);
+
+  return {
+    imageBase64: compressed.split(",")[1],
+    mimeType: "image/jpeg"
+  };
+}
+
 async function loadImage(file) {
   const dataURL = await fileToDataURL(file);
   const image = await loadBrowserImage(dataURL);
@@ -88,7 +101,13 @@ async function loadImage(file) {
   canvas.width = Math.round(image.width * scale);
   canvas.height = Math.round(image.height * scale);
 
-  canvas.getContext("2d").drawImage(
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Gagal memproses gambar PDF.");
+  }
+
+  context.drawImage(
     image,
     0,
     0,
@@ -104,7 +123,7 @@ async function loadImage(file) {
 }
 
 // ===============================
-// PREVIEW FOTO
+// PREVIEW FOTO NOTA
 // ===============================
 
 function renderReceiptPreview() {
@@ -119,6 +138,7 @@ function renderReceiptPreview() {
   }
 
   const image = document.createElement("img");
+
   image.src = URL.createObjectURL(receiptFile);
   image.alt = "Foto nota";
   image.style.maxWidth = "100%";
@@ -127,6 +147,10 @@ function renderReceiptPreview() {
 
   container.appendChild(image);
 }
+
+// ===============================
+// PREVIEW FOTO KEGIATAN
+// ===============================
 
 function renderSupportingPreview() {
   const container = $("supporting-preview");
@@ -149,6 +173,7 @@ function renderSupportingPreview() {
     wrapper.style.maxWidth = "130px";
 
     const image = document.createElement("img");
+
     image.src = URL.createObjectURL(file);
     image.alt = "Foto kegiatan " + (index + 1);
     image.style.width = "120px";
@@ -157,6 +182,7 @@ function renderSupportingPreview() {
     image.style.borderRadius = "8px";
 
     const remove = document.createElement("button");
+
     remove.type = "button";
     remove.textContent = "Hapus";
     remove.style.marginTop = "5px";
@@ -201,7 +227,10 @@ function stopCamera() {
 
   ["receipt-webcam", "supporting-webcam"].forEach(id => {
     const container = $(id);
-    if (container) container.hidden = true;
+
+    if (container) {
+      container.hidden = true;
+    }
   });
 }
 
@@ -235,6 +264,8 @@ async function openCamera(target) {
     await video.play();
 
   } catch (error) {
+    console.error(error);
+
     alert(
       "Kamera tidak dapat dibuka. Periksa izin kamera dan koneksi HTTPS."
     );
@@ -255,6 +286,7 @@ function takePhoto(target) {
   }
 
   const canvas = document.createElement("canvas");
+
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
@@ -375,7 +407,7 @@ function updateTelegramCaption() {
 }
 
 // ===============================
-// KIRIM FOTO KE GOOGLE APPS SCRIPT
+// KIRIM FOTO KE APPS SCRIPT
 // ===============================
 
 function sendToBackend(payload) {
@@ -393,6 +425,7 @@ function sendToBackend(payload) {
     form.style.display = "none";
 
     const input = document.createElement("input");
+
     input.type = "hidden";
     input.name = "payload";
     input.value = JSON.stringify(payload);
@@ -441,7 +474,6 @@ function sendToBackend(payload) {
       }
     };
 
-    // Apps Script dapat membutuhkan waktu beberapa menit.
     const timeout = setTimeout(() => {
       finish(
         reject,
@@ -460,6 +492,10 @@ function sendToBackend(payload) {
   });
 }
 
+// ===============================
+// SCAN NOTA
+// ===============================
+
 async function scanReceipt() {
   if (!receiptFile) {
     alert("Silakan pilih atau ambil foto nota terlebih dahulu.");
@@ -467,6 +503,11 @@ async function scanReceipt() {
   }
 
   const button = $("scan-button");
+
+  if (!button) {
+    alert("Tombol scan tidak ditemukan.");
+    return;
+  }
 
   try {
     button.disabled = true;
@@ -511,53 +552,59 @@ async function scanReceipt() {
 // MEMUAT LIBRARY PDF
 // ===============================
 
-function loadPDFLibrary() {
+async function loadPDFLibrary() {
   if (window.jspdf?.jsPDF) {
-    return Promise.resolve(window.jspdf.jsPDF);
-  }
-
-  if (window.pdfLibraryLoading) {
-    return window.pdfLibraryLoading;
+    return window.jspdf.jsPDF;
   }
 
   const sources = [
     "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
-    "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"
+    "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
+    "https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"
   ];
 
-  window.pdfLibraryLoading = (async () => {
-    for (const source of sources) {
-      try {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
+  for (const source of sources) {
+    try {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
 
-          script.src = source;
-          script.async = true;
-          script.onload = resolve;
-          script.onerror = reject;
+        const timeout = setTimeout(
+          () => reject(new Error("Waktu pemuatan PDF habis.")),
+          12000
+        );
 
-          document.head.appendChild(script);
-        });
+        script.src = source;
+        script.async = true;
 
-        if (window.jspdf?.jsPDF) {
-          return window.jspdf.jsPDF;
-        }
+        script.onload = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
 
-      } catch (error) {
-        console.warn("Library PDF gagal dimuat:", source);
+        script.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("Library PDF gagal dimuat."));
+        };
+
+        document.head.appendChild(script);
+      });
+
+      if (window.jspdf?.jsPDF) {
+        return window.jspdf.jsPDF;
       }
+
+    } catch (error) {
+      console.warn("Mencoba sumber PDF berikutnya:", source);
     }
+  }
 
-    throw new Error(
-      "Library PDF tidak dapat dimuat. Periksa koneksi internet."
-    );
-  })();
-
-  return window.pdfLibraryLoading;
+  throw new Error(
+    "Library PDF gagal dimuat dari semua sumber. Periksa koneksi internet."
+  );
 }
 
 // ===============================
-// MEMBUAT PDF A4 SATU HALAMAN
+// MENYESUAIKAN FOTO DALAM PDF
 // ===============================
 
 function fitImage(doc, image, x, y, maxWidth, maxHeight) {
@@ -579,6 +626,10 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
   );
 }
 
+// ===============================
+// MEMBUAT PDF A4 SATU HALAMAN
+// ===============================
+
 async function createPDF() {
   if (!receiptFile) {
     alert("Foto nota harus tersedia untuk membuat PDF.");
@@ -587,11 +638,19 @@ async function createPDF() {
 
   const button = $("pdf-button");
 
+  if (!button) {
+    alert("Tombol PDF tidak ditemukan. Periksa index.html.");
+    return;
+  }
+
   try {
     button.disabled = true;
     button.textContent = "Membuat PDF...";
 
-    showMessage("pdf-message", "Sedang membuat dokumen PDF...");
+    showMessage(
+      "pdf-message",
+      "Menyiapkan PDF, mohon tunggu..."
+    );
 
     const jsPDF = await loadPDFLibrary();
 
@@ -606,7 +665,11 @@ async function createPDF() {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text("DOKUMENTASI BUKTI PENGELUARAN", margin, y);
+    doc.text(
+      "DOKUMENTASI BUKTI PENGELUARAN",
+      margin,
+      y
+    );
 
     y += 8;
 
@@ -700,7 +763,7 @@ async function createPDF() {
     );
 
   } catch (error) {
-    console.error(error);
+    console.error("PDF ERROR:", error);
 
     showMessage(
       "pdf-message",
@@ -730,11 +793,13 @@ function downloadFile(file, index) {
   link.click();
   link.remove();
 
-  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 15000);
 }
 
 // ===============================
-// TERUSKAN KE TELEGRAM
+// TERUSKAN KE TELEGRAM DESKTOP
 // ===============================
 
 async function sendToTelegram() {
@@ -751,66 +816,84 @@ async function sendToTelegram() {
     ...supportingFiles
   ];
 
+  if (!button) {
+    alert("Tombol Telegram tidak ditemukan.");
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Menyiapkan dokumentasi...";
+
+  // Mencoba membuka aplikasi Telegram.
+  // Browser atau Windows mungkin meminta izin.
+  const telegramAppURL =
+    "tg://msg?text=" + encodeURIComponent(caption);
+
+  let telegramWindow = null;
+
   try {
-    button.disabled = true;
-    button.textContent = "Menyiapkan dokumentasi...";
+    telegramWindow = window.open(
+      telegramAppURL,
+      "_blank"
+    );
+  } catch (error) {
+    console.warn("Telegram Desktop tidak dapat dibuka:", error);
+  }
 
-    // Pilihan pertama: menu berbagi perangkat.
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files })
-    ) {
-      await navigator.share({
-        title: "Dokumentasi Bukti Pengeluaran",
-        text: caption,
-        files: files
-      });
-
-      showMessage(
-        "telegram-message",
-        "Menu berbagi berhasil dibuka. Pilih Telegram jika tersedia.",
-        "green"
-      );
-
-      return;
-    }
-
-    // Pilihan kedua: unduh foto dan salin keterangan.
+  try {
+    // Unduh semua foto.
     files.forEach((file, index) => {
       downloadFile(file, index);
     });
 
+    // Salin keterangan.
+    let copied = false;
+
     try {
       await navigator.clipboard.writeText(caption);
-      showMessage(
-        "telegram-message",
-        "Foto diunduh dan keterangan berhasil disalin. Membuka Telegram..."
-      );
+      copied = true;
     } catch (error) {
-      showMessage(
-        "telegram-message",
-        "Foto diunduh. Salin keterangan secara manual dari kolom pesan."
-      );
+      console.warn("Gagal menyalin keterangan:", error);
     }
 
-    // Membuka halaman berbagi Telegram.
-    const telegramURL =
-      "https://t.me/share/url?url=&text=" +
-      encodeURIComponent(caption);
+    if (telegramWindow) {
+      showMessage(
+        "telegram-message",
+        copied
+          ? "Foto diunduh dan keterangan disalin. Jika Telegram terbuka, lampirkan foto dan tempel keterangan."
+          : "Foto diunduh. Salin keterangan dari kolom pesan."
+      );
+    } else {
+      showMessage(
+        "telegram-message",
+        "Foto diunduh. Browser tidak membuka aplikasi Telegram otomatis."
+      );
 
-    window.open(telegramURL, "_blank");
+      const message = $("telegram-message");
+
+      if (message) {
+        const link = document.createElement("a");
+
+        link.href =
+          "https://t.me/share/url?url=&text=" +
+          encodeURIComponent(caption);
+
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = " Buka Telegram Web";
+
+        message.appendChild(link);
+      }
+    }
 
   } catch (error) {
-    if (error.name !== "AbortError") {
-      console.error(error);
+    console.error("TELEGRAM ERROR:", error);
 
-      showMessage(
-        "telegram-message",
-        "Gagal membuka fitur berbagi: " + error.message,
-        "red"
-      );
-    }
+    showMessage(
+      "telegram-message",
+      "Gagal menyiapkan dokumentasi: " + error.message,
+      "red"
+    );
 
   } finally {
     button.disabled = false;
@@ -823,7 +906,6 @@ async function sendToTelegram() {
 // ===============================
 
 function initializeApp() {
-
   $("receipt-camera-button")?.addEventListener(
     "click",
     () => openCamera("receipt")
@@ -896,7 +978,10 @@ function initializeApp() {
     event.target.value = "";
   });
 
-  $("scan-button")?.addEventListener("click", scanReceipt);
+  $("scan-button")?.addEventListener(
+    "click",
+    scanReceipt
+  );
 
   $("kategori")?.addEventListener(
     "change",
@@ -919,7 +1004,10 @@ function initializeApp() {
     );
   });
 
-  $("pdf-button")?.addEventListener("click", createPDF);
+  $("pdf-button")?.addEventListener(
+    "click",
+    createPDF
+  );
 
   $("telegram-button")?.addEventListener(
     "click",
