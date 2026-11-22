@@ -1,0 +1,187 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Smart Expense Evidence</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="brand">TELKOM AKSES</div>
+  <h1>AI Smart Expense Evidence</h1>
+  <p>Smart scanning bukti transaksi operasional</p>
+  <div id="server-status" class="status">Memeriksa koneksi...</div>
+</header>
+
+<main class="container">
+
+  <section class="panel">
+    <h2>1. Foto Nota</h2>
+    <p>Pilih cara memasukkan foto nota.</p>
+
+    <input type="file" id="receipt-camera" accept="image/*" capture="environment" hidden>
+    <input type="file" id="receipt-gallery" accept="image/*" hidden>
+
+    <button type="button" id="receipt-camera-button">
+      Ambil dari Kamera
+    </button>
+
+    <button type="button" id="receipt-gallery-button">
+      Pilih dari Galeri
+    </button>
+
+    <div id="receipt-preview"></div>
+    <div id="receipt-webcam" style="display:none;">
+  <video id="receipt-video" autoplay playsinline
+    style="width:100%; max-width:400px; border-radius:10px;">
+  </video>
+
+  <br>
+
+  <button type="button" id="receipt-take-photo">
+    Jepret Foto
+  </button>
+
+  <button type="button" id="receipt-close-camera">
+    Tutup Kamera
+  </button>
+</div>
+
+    <button id="scan-button" type="button">
+      Scan Nota dengan AI
+    </button>
+
+    <p id="scan-message"></p>
+  </section>
+
+  <section class="panel">
+    <h2>2. Foto Pendukung</h2>
+    <p>
+      Tambahkan foto barang, dokumentasi pekerjaan,
+      atau bukti pendukung lainnya.
+    </p>
+
+    <input type="file" id="supporting-camera" accept="image/*" capture="environment" hidden>
+    <input type="file" id="supporting-gallery" accept="image/*" multiple hidden>
+
+    <button type="button" id="supporting-camera-button">
+      Ambil dari Kamera
+    </button>
+
+    <button type="button" id="supporting-gallery-button">
+      Pilih dari Galeri
+    </button>
+
+    <div id="supporting-preview"></div>
+    <p id="supporting-message"></p>
+  </section>
+
+  <section class="panel">
+    <h2>3. Hasil Pembacaan Nota</h2>
+    <p>Data yang tidak ditemukan tidak akan diisi dengan tebakan.</p>
+
+    <form id="receipt-form">
+
+      <div class="form-grid">
+        <div>
+          <label for="tanggal">Tanggal transaksi</label>
+          <input id="tanggal" type="text">
+        </div>
+
+        <div>
+          <label for="nominal">Nominal total (Rp)</label>
+          <input id="nominal" type="text">
+        </div>
+
+        <div>
+          <label for="toko">Nama toko atau vendor</label>
+          <input id="toko" type="text">
+        </div>
+
+        <div>
+          <label for="plat">Nomor plat kendaraan</label>
+          <input id="plat" type="text" placeholder="Isi jika tidak tercantum">
+        </div>
+
+        <div>
+          <label for="kategori">Kategori transaksi</label>
+          <select id="kategori">
+            <option value="">Pilih kategori</option>
+            <option value="BBM">BBM</option>
+            <option value="MAKAN">Makan</option>
+            <option value="MATERIAL">Material</option>
+            <option value="PENGINAPAN">Penginapan</option>
+            <option value="TRANSPORTASI">Transportasi</option>
+            <option value="PENGIRIMAN">Pengiriman / Ekspedisi</option>
+            <option value="LAINNYA">Lainnya</option>
+            <option value="TIDAK DIKETAHUI">Tidak diketahui</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="jumlah_volume">Jumlah atau volume</label>
+          <input id="jumlah_volume" type="text">
+        </div>
+
+        <div>
+          <label for="harga_satuan">Harga satuan</label>
+          <input id="harga_satuan" type="text">
+        </div>
+
+        <div>
+          <label for="kegiatan">Tujuan atau kegiatan</label>
+          <input id="kegiatan" type="text">
+        </div>
+      </div>
+
+      <div id="bbm-fields" hidden>
+        <h3>Data Pengisian BBM</h3>
+
+        <label for="kilometer">Kilometer Kendaraan</label>
+        <input
+          id="kilometer"
+          type="text"
+          inputmode="numeric"
+          placeholder="Contoh: 45730"
+        >
+
+        <p id="bbm-message"></p>
+      </div>
+
+      <label for="keterangan">Keterangan barang atau layanan</label>
+      <textarea id="keterangan" rows="3"></textarea>
+
+      <label for="catatan">Catatan tambahan</label>
+      <textarea id="catatan" rows="3"></textarea>
+
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>4. Kirim ke Telegram</h2>
+    <p>Periksa data, lalu bagikan foto dan caption ke grup Finance.</p>
+
+    <button id="telegram-button" type="button">
+      Bagikan ke Telegram
+    </button>
+
+    <label for="telegram-caption">Caption transaksi</label>
+    <textarea
+      id="telegram-caption"
+      rows="12"
+      placeholder="Caption akan dibuat otomatis..."
+    ></textarea>
+  </section>
+
+</main>
+
+<footer>
+  AI Smart Expense Evidence
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
