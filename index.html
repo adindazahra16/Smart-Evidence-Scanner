@@ -11,174 +11,176 @@
 
 <body>
 
-  <header class="header">
-    <div class="brand">TELKOM AKSES</div>
-    <h1>AI Smart Expense Evidence</h1>
-    <p>Digitalisasi dokumentasi bukti pengeluaran</p>
-  </header>
+<header class="header">
+  <div class="brand">TELKOM AKSES</div>
+  <h1>AI Smart Expense Evidence</h1>
+  <p>Digitalisasi dokumentasi bukti pengeluaran</p>
+</header>
 
-  <main class="container">
+<main class="container">
 
-    <section class="card">
-      <h2>1. Foto Nota</h2>
-      <p>Ambil foto nota menggunakan kamera atau pilih dari galeri.</p>
+  <section class="card">
+    <h2>1. Foto Nota</h2>
+    <p>Ambil foto nota menggunakan kamera atau pilih dari galeri.</p>
 
+    <div class="button-group">
+      <button type="button" id="receipt-camera-button">Buka Kamera</button>
+      <button type="button" id="receipt-gallery-button">Pilih dari Galeri</button>
+    </div>
+
+    <input type="file" id="receipt-camera" accept="image/*" capture="environment" hidden>
+    <input type="file" id="receipt-gallery" accept="image/*" hidden>
+
+    <div id="receipt-webcam" hidden>
+      <video id="receipt-video" autoplay playsinline></video>
       <div class="button-group">
-        <button type="button" id="receipt-camera-button">Buka Kamera</button>
-        <button type="button" id="receipt-gallery-button">Pilih dari Galeri</button>
+        <button type="button" id="receipt-take-photo">Ambil Foto</button>
+        <button type="button" id="receipt-close-camera">Tutup Kamera</button>
       </div>
+    </div>
 
-      <input type="file" id="receipt-camera" accept="image/*" capture="environment" hidden>
-      <input type="file" id="receipt-gallery" accept="image/*" hidden>
+    <div id="receipt-preview"></div>
 
-      <div id="receipt-webcam" hidden>
-        <video id="receipt-video" autoplay playsinline></video>
-        <div class="button-group">
-          <button type="button" id="receipt-take-photo">Ambil Foto</button>
-          <button type="button" id="receipt-close-camera">Tutup Kamera</button>
-        </div>
-      </div>
+    <button type="button" id="scan-button">Periksa Nota dengan AI</button>
+    <p id="scan-message" role="status"></p>
+  </section>
 
-      <div id="receipt-preview"></div>
+  <section class="card">
+    <h2>2. Hasil Pemeriksaan Nota</h2>
+    <p>Periksa dan koreksi hasil pembacaan AI jika diperlukan.</p>
 
-      <button type="button" id="scan-button">Periksa Nota dengan AI</button>
-      <p id="scan-message" role="status"></p>
-    </section>
+    <div class="form-group">
+      <label for="tanggal">Tanggal</label>
+      <input type="text" id="tanggal" placeholder="DD/MM/YYYY">
+    </div>
 
-    <section class="card">
-      <h2>2. Hasil Pemeriksaan Nota</h2>
-      <p>Periksa dan koreksi hasil pembacaan AI jika diperlukan.</p>
+    <div class="form-group">
+      <label for="nominal">Nominal</label>
+      <input type="text" id="nominal" placeholder="Nominal pengeluaran">
+    </div>
+
+    <div class="form-group">
+      <label for="vendor">Nama Vendor / Toko</label>
+      <input type="text" id="vendor" placeholder="Nama vendor">
+    </div>
+
+    <div class="form-group">
+      <label for="kategori">Kategori Pengeluaran</label>
+      <select id="kategori">
+        <option value="">Pilih kategori</option>
+        <option value="BBM">BBM</option>
+        <option value="MAKAN">MAKAN</option>
+        <option value="MATERIAL">MATERIAL</option>
+        <option value="PENGINAPAN">PENGINAPAN</option>
+        <option value="TRANSPORTASI">TRANSPORTASI</option>
+        <option value="PENGIRIMAN">PENGIRIMAN</option>
+        <option value="LAINNYA">LAINNYA</option>
+        <option value="TIDAK DIKETAHUI">TIDAK DIKETAHUI</option>
+      </select>
+    </div>
+
+    <div id="bbm-fields" hidden>
+      <h3>Informasi BBM</h3>
 
       <div class="form-group">
-        <label for="tanggal">Tanggal</label>
-        <input type="text" id="tanggal" placeholder="DD/MM/YYYY">
-      </div>
-
-      <div class="form-group">
-        <label for="nominal">Nominal</label>
-        <input type="text" id="nominal" placeholder="Nominal pengeluaran">
-      </div>
-
-      <div class="form-group">
-        <label for="vendor">Nama Vendor / Toko</label>
-        <input type="text" id="vendor" placeholder="Nama vendor">
-      </div>
-
-      <div class="form-group">
-        <label for="kategori">Kategori Pengeluaran</label>
-        <select id="kategori">
-          <option value="">Pilih kategori</option>
-          <option value="BBM">BBM</option>
-          <option value="MAKAN">MAKAN</option>
-          <option value="MATERIAL">MATERIAL</option>
-          <option value="PENGINAPAN">PENGINAPAN</option>
-          <option value="TRANSPORTASI">TRANSPORTASI</option>
-          <option value="PENGIRIMAN">PENGIRIMAN</option>
-          <option value="LAINNYA">LAINNYA</option>
-          <option value="TIDAK DIKETAHUI">TIDAK DIKETAHUI</option>
-        </select>
-      </div>
-
-      <div id="bbm-fields" hidden>
-        <h3>Informasi BBM</h3>
-
-        <div class="form-group">
-          <label for="plat">Nomor Kendaraan</label>
-          <input type="text" id="plat" placeholder="Contoh: KT 1234 XX">
-        </div>
-
-        <div class="form-group">
-          <label for="kilometer">Kilometer</label>
-          <input type="text" id="kilometer" placeholder="Angka kilometer">
-        </div>
-
-        <p id="bbm-message"></p>
+        <label for="plat">Nomor Kendaraan</label>
+        <input type="text" id="plat" placeholder="Contoh: KT 1234 XX">
       </div>
 
       <div class="form-group">
-        <label for="kegiatan">Uraian Kegiatan</label>
-        <textarea id="kegiatan" rows="3" placeholder="Deskripsi kegiatan"></textarea>
+        <label for="kilometer">Kilometer</label>
+        <input type="text" id="kilometer" placeholder="Angka kilometer">
       </div>
 
-      <div class="form-group">
-        <label for="volume">Volume</label>
-        <input type="text" id="volume" placeholder="Volume">
-      </div>
+      <p id="bbm-message"></p>
+    </div>
 
-      <div class="form-group">
-        <label for="harga_satuan">Harga Satuan</label>
-        <input type="text" id="harga_satuan" placeholder="Harga satuan">
-      </div>
+    <div class="form-group">
+      <label for="kegiatan">Uraian Kegiatan</label>
+      <textarea id="kegiatan" rows="3" placeholder="Deskripsi kegiatan"></textarea>
+    </div>
 
-      <div class="form-group">
-        <label for="keterangan">Keterangan</label>
-        <textarea id="keterangan" rows="3" placeholder="Keterangan tambahan"></textarea>
-      </div>
-    </section>
+    <div class="form-group">
+      <label for="volume">Volume</label>
+      <input type="text" id="volume" placeholder="Volume">
+    </div>
 
-    <section class="card">
-      <h2>3. Foto Dokumentasi Kegiatan</h2>
-      <p>Tambahkan foto sebagai bukti pelaksanaan kegiatan.</p>
+    <div class="form-group">
+      <label for="harga_satuan">Harga Satuan</label>
+      <input type="text" id="harga_satuan" placeholder="Harga satuan">
+    </div>
 
+    <div class="form-group">
+      <label for="keterangan">Keterangan</label>
+      <textarea id="keterangan" rows="3" placeholder="Keterangan tambahan"></textarea>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Foto Dokumentasi Kegiatan</h2>
+    <p>Tambahkan foto sebagai bukti pelaksanaan kegiatan.</p>
+
+    <div class="button-group">
+      <button type="button" id="supporting-camera-button">Buka Kamera</button>
+      <button type="button" id="supporting-gallery-button">Pilih dari Galeri</button>
+    </div>
+
+    <input type="file" id="supporting-camera" accept="image/*" capture="environment" multiple hidden>
+    <input type="file" id="supporting-gallery" accept="image/*" multiple hidden>
+
+    <div id="supporting-webcam" hidden>
+      <video id="supporting-video" autoplay playsinline></video>
       <div class="button-group">
-        <button type="button" id="supporting-camera-button">Buka Kamera</button>
-        <button type="button" id="supporting-gallery-button">Pilih dari Galeri</button>
+        <button type="button" id="supporting-take-photo">Ambil Foto</button>
+        <button type="button" id="supporting-close-camera">Tutup Kamera</button>
       </div>
+    </div>
 
-      <input type="file" id="supporting-camera" accept="image/*" capture="environment" multiple hidden>
-      <input type="file" id="supporting-gallery" accept="image/*" multiple hidden>
+    <div id="supporting-preview"></div>
+    <p id="supporting-message"></p>
+  </section>
 
-      <div id="supporting-webcam" hidden>
-        <video id="supporting-video" autoplay playsinline></video>
-        <div class="button-group">
-          <button type="button" id="supporting-take-photo">Ambil Foto</button>
-          <button type="button" id="supporting-close-camera">Tutup Kamera</button>
-        </div>
-      </div>
+  <section class="card">
+    <h2>4. Buat Dokumen PDF</h2>
+    <p>
+      PDF dibuat dalam satu halaman A4 berisi foto nota,
+      maksimal empat foto dokumentasi kegiatan, dan uraian kegiatan.
+    </p>
 
-      <div id="supporting-preview"></div>
-      <p id="supporting-message"></p>
-    </section>
+    <button type="button" id="pdf-button">Buat PDF A4</button>
+    <p id="pdf-message" role="status"></p>
+  </section>
 
-    <section class="card">
-      <h2>4. Buat Dokumen PDF</h2>
-      <p>
-        PDF dibuat dalam satu halaman A4 dan berisi foto nota,
-        foto dokumentasi kegiatan, serta uraian kegiatan.
-      </p>
-      <p>
-        Foto nota diprioritaskan. Maksimal empat foto dokumentasi
-        kegiatan akan dimasukkan agar tetap satu halaman.
-      </p>
-    </section>
+  <section class="card">
+    <h2>5. Teruskan ke Telegram</h2>
+    <p>Periksa keterangan sebelum meneruskan dokumentasi.</p>
 
-    <section class="card">
-      <h2>5. Teruskan ke Telegram</h2>
-      <p>Periksa keterangan sebelum meneruskan dokumentasi.</p>
+    <div class="form-group">
+      <label for="telegram-caption">Keterangan Pesan</label>
+      <textarea
+        id="telegram-caption"
+        rows="5"
+        placeholder="Keterangan yang akan diteruskan ke Telegram"
+      ></textarea>
+    </div>
 
-      <div class="form-group">
-        <label for="telegram-caption">Keterangan Pesan</label>
-        <textarea
-          id="telegram-caption"
-          rows="5"
-          placeholder="Keterangan yang akan diteruskan ke Telegram"
-        ></textarea>
-      </div>
+    <button type="button" id="telegram-button">
+      Teruskan ke Telegram
+    </button>
 
-      <button type="button" id="telegram-button">Teruskan ke Telegram</button>
-    </section>
+    <p id="telegram-message" role="status"></p>
+  </section>
 
-    <p id="server-status" role="status">Aplikasi sedang dimuat...</p>
+  <p id="server-status" role="status">Aplikasi sedang dimuat...</p>
 
-  </main>
+</main>
 
-  <footer class="footer">
-    <p>AI Smart Expense Evidence</p>
-    <p>Telkom Akses</p>
-  </footer>
+<footer class="footer">
+  <p>AI Smart Expense Evidence</p>
+  <p>Telkom Akses</p>
+</footer>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
-  <script src="script.js"></script>
+<script src="script.js"></script>
 
 </body>
 </html>
