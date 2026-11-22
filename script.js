@@ -1,4 +1,535 @@
+const $ = id => document.getElementById(id);
 
+const GAS_WEB_APP_URL =
+  "https://script.google.com/macros/s/AKfycbwbr3V2prmOTXXqff-DxAqr4gbEurNBzkjNQQNjOqGZMM9i1xIUcZKqgj_UvPbPoWjA/exec";
+
+let receiptFile = null;
+let supportingFiles = [];
+let cameraStream = null;
+let activeCameraTarget = null;
+
+const receiptCamera = $("receipt-camera");
+const receiptGallery = $("receipt-gallery");
+const supportingCamera = $("supporting-camera");
+const supportingGallery = $("supporting-gallery");
+
+function showMessage(id, message, error = false) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = error ? "#c62828" : "#16803c";
+}
+
+function previewImage(file, container, onRemove) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "preview-item";
+
+  const image = document.createElement("img");
+  image.src = URL.createObjectURL(file);
+  image.alt = "Foto bukti pengeluaran";
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "Hapus";
+  remove.addEventListener("click", () => {
+    URL.revokeObjectURL(image.src);
+    wrapper.remove();
+    onRemove();
+  });
+
+  wrapper.append(image, remove);
+  container.appendChild(wrapper);
+}
+
+function setReceipt(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+
+  receiptFile = file;
+  $("receipt-preview").innerHTML = "";
+
+  previewImage(file, $("receipt-preview"), () => {
+    receiptFile = null;
+  });
+
+  showMessage("scan-message", "Foto nota berhasil dipilih.");
+}
+
+function addSupportingFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+
+    supportingFiles.push(file);
+
+    previewImage(file, $("supporting-preview"), () => {
+      supportingFiles = supportingFiles.filter(item => item !== file);
+    });
+  }
+
+  showMessage(
+    "supporting-message",
+    supportingFiles.length
+      ? supportingFiles.length + " foto pendukung dipilih."
+      : "Belum ada foto pendukung."
+  );
+}
+
+receiptCamera.addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (file) setReceipt(file);
+  event.target.value = "";
+});
+
+receiptGallery.addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (file) setReceipt(file);
+  event.target.value = "";
+});
+
+supportingCamera.addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (file) addSupportingFiles([file]);
+  event.target.value = "";
+});
+
+supportingGallery.addEventListener("change", event => {
+  if (event.target.files.length) {
+    addSupportingFiles(Array.from(event.target.files));
+  }
+  event.target.value = "";
+});
+
+$("receipt-camera-button").addEventListener("click", () => {
+  receiptCamera.click();
+});
+
+$("receipt-gallery-button").addEventListener("click", () => {
+  receiptGallery.click();
+});
+
+$("supporting-camera-button").addEventListener("click", () => {
+  supportingCamera.click();
+});
+
+$("supporting-gallery-button").addEventListener("click", () => {
+  supportingGallery.click();
+});
+
+// Kamera langsung untuk laptop dan HP
+async function openWebcam(target) {
+  closeWebcam();
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showMessage(
+      target === "receipt" ? "scan-message" : "supporting-message",
+      "Kamera tidak didukung. Gunakan pilihan galeri atau kamera perangkat.",
+      true
+    );
+    return;
+  }
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false
+    });
+
+    activeCameraTarget = target;
+
+    let container;
+    let video;
+    let captureButton;
+    let closeButton;
+
+    if (target === "receipt") {
+      container = $("receipt-webcam");
+      video = $("receipt-video");
+      captureButton = $("receipt-take-photo");
+      closeButton = $("receipt-close-camera");
+    } else {
+      container = $("supporting-webcam");
+
+      if (!container) {
+        container = document.createElement("div");
+        container.id = "supporting-webcam";
+        $("supporting-preview").before(container);
+
+        video = document.createElement("video");
+        video.id = "supporting-video";
+        video.autoplay = true;
+        video.playsInline = true;
+
+        captureButton = document.createElement("button");
+        captureButton.type = "button";
+        captureButton.textContent = "Ambil Foto";
+
+        closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.textContent = "Tutup Kamera";
+
+        const controls = document.createElement("div");
+        controls.className = "button-group";
+        controls.append(captureButton, closeButton);
+        container.append(video, controls);
+      } else {
+        video = $("supporting-video");
+        captureButton = container.querySelector("button:first-of-type");
+        closeButton = container.querySelector("button:last-of-type");
+      }
+    }
+
+    video.srcObject = cameraStream;
+    container.hidden = false;
+
+    captureButton.onclick = () => capturePhoto(video, target);
+    closeButton.onclick = closeWebcam;
+
+    await video.play();
+
+  } catch (error) {
+    closeWebcam();
+
+    showMessage(
+      target === "receipt" ? "scan-message" : "supporting-message",
+      "Kamera tidak dapat dibuka. Izinkan akses kamera pada browser.",
+      true
+    );
+  }
+}
+
+function closeWebcam() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+
+  $("receipt-webcam").hidden = true;
+
+  const supportingWebcam = $("supporting-webcam");
+  if (supportingWebcam) supportingWebcam.hidden = true;
+
+  activeCameraTarget = null;
+}
+
+function capturePhoto(video, target) {
+  if (!video.videoWidth || !video.videoHeight) {
+    showMessage("scan-message", "Kamera belum siap. Coba lagi.", true);
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const context = canvas.getContext("2d");
+  context.drawImage(video, 0, 0);
+
+  canvas.toBlob(blob => {
+    if (!blob) return;
+
+    const file = new File(
+      [blob],
+      "foto-" + Date.now() + ".jpg",
+      { type: "image/jpeg" }
+    );
+
+    if (target === "receipt") {
+      setReceipt(file);
+    } else {
+      addSupportingFiles([file]);
+    }
+
+    closeWebcam();
+  }, "image/jpeg", 0.9);
+}
+
+$("receipt-camera-button").addEventListener("dblclick", () => {
+  openWebcam("receipt");
+});
+
+// Gunakan kamera langsung melalui tombol khusus tambahan.
+function addDirectCameraButtons() {
+  const receiptButton = document.createElement("button");
+  receiptButton.type = "button";
+  receiptButton.textContent = "Kamera Langsung";
+  receiptButton.addEventListener("click", () => openWebcam("receipt"));
+
+  $("receipt-webcam").before(receiptButton);
+
+  const supportingButton = document.createElement("button");
+  supportingButton.type = "button";
+  supportingButton.textContent = "Kamera Langsung";
+  supportingButton.addEventListener("click", () => openWebcam("supporting"));
+
+  $("supporting-preview").before(supportingButton);
+}
+
+addDirectCameraButtons();
+
+// Kompres foto agar pengiriman ke AI lebih ringan.
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectURL = URL.createObjectURL(file);
+
+    image.onload = () => {
+      const maxSize = 1800;
+      const ratio = Math.min(
+        1,
+        maxSize / Math.max(image.width, image.height)
+      );
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * ratio);
+      canvas.height = Math.round(image.height * ratio);
+
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(objectURL);
+
+        if (!blob) {
+          reject(new Error("Gagal memproses foto."));
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve({
+            mimeType: "image/jpeg",
+            base64: reader.result.split(",")[1]
+          });
+        };
+
+        reader.onerror = () => reject(new Error("Gagal membaca foto."));
+        reader.readAsDataURL(blob);
+      }, "image/jpeg", 0.82);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectURL);
+      reject(new Error("Foto tidak dapat dibaca."));
+    };
+
+    image.src = objectURL;
+  });
+}
+
+// Mengirim data ke Google Apps Script melalui iframe.
+function callAppsScript(payload) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.name = "gas-response-" + Date.now();
+    iframe.style.display = "none";
+
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = GAS_WEB_APP_URL;
+    form.target = iframe.name;
+    form.style.display = "none";
+
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "payload";
+    input.value = JSON.stringify(payload);
+
+    form.appendChild(input);
+    document.body.append(iframe, form);
+
+    let finished = false;
+
+    const cleanup = () => {
+      window.removeEventListener("message", receiveMessage);
+      form.remove();
+      iframe.remove();
+    };
+
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error("Waktu koneksi habis. Coba lagi."));
+    }, 120000);
+
+    function receiveMessage(event) {
+      if (event.source !== iframe.contentWindow) return;
+
+      const result = event.data;
+
+      if (!result || typeof result.success !== "boolean") return;
+
+      finished = true;
+      clearTimeout(timer);
+      cleanup();
+
+      if (result.success) {
+        resolve(result.data);
+      } else {
+        reject(new Error(result.error || "Gagal membaca nota."));
+      }
+    }
+
+    window.addEventListener("message", receiveMessage);
+
+    form.submit();
+  });
+}
+
+function fillResult(data) {
+  $("tanggal").value = data.tanggal || "";
+  $("nominal").value = data.nominal || "";
+  $("vendor").value = data.vendor || "";
+  $("kategori").value = data.kategori || "";
+  $("kegiatan").value = data.kegiatan || "";
+  $("volume").value = data.volume || "";
+  $("harga_satuan").value = data.harga_satuan || "";
+  $("plat").value = data.plat || "";
+  $("kilometer").value = data.kilometer || "";
+  $("keterangan").value = data.keterangan || "";
+
+  updateBBM();
+}
+
+function updateBBM() {
+  const isBBM = $("kategori").value === "BBM";
+  $("bbm-fields").hidden = !isBBM;
+
+  if (isBBM) {
+    $("bbm-message").textContent =
+      "Pastikan nomor polisi dan kilometer sudah sesuai dengan nota.";
+  }
+}
+
+$("kategori").addEventListener("change", updateBBM);
+
+// Proses scan nota.
+$("scan-button").addEventListener("click", async () => {
+  if (!receiptFile) {
+    showMessage("scan-message", "Pilih atau foto nota terlebih dahulu.", true);
+    return;
+  }
+
+  const button = $("scan-button");
+  button.disabled = true;
+  button.textContent = "AI sedang membaca nota...";
+
+  showMessage("scan-message", "Sedang memproses foto nota...");
+
+  try {
+    const image = await compressImage(receiptFile);
+
+    const result = await callAppsScript({
+      image: image.base64,
+      mimeType: image.mimeType
+    });
+
+    fillResult(result);
+
+    showMessage(
+      "scan-message",
+      "Nota berhasil dibaca. Periksa kembali hasilnya sebelum diteruskan."
+    );
+
+  } catch (error) {
+    showMessage("scan-message", error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Periksa Nota dengan AI";
+  }
+});
+
+// Membuat caption dari hasil pembacaan nota.
+function makeCaption() {
+  return [
+    "BUKTI PENGELUARAN - TELKOM AKSES",
+    "",
+    "Tanggal: " + $("tanggal").value,
+    "Nominal: " + $("nominal").value,
+    "Vendor: " + $("vendor").value,
+    "Kategori: " + $("kategori").value,
+    "Kegiatan: " + $("kegiatan").value,
+    "Volume: " + $("volume").value,
+    "Harga Satuan: " + $("harga_satuan").value,
+    "Nomor Polisi: " + $("plat").value,
+    "Kilometer: " + $("kilometer").value,
+    "Keterangan: " + $("keterangan").value
+  ].join("\n");
+}
+
+// Teruskan foto dan data ke Telegram melalui menu berbagi perangkat.
+$("telegram-button").addEventListener("click", async () => {
+  if (!receiptFile) {
+    showMessage("supporting-message", "Foto nota belum dipilih.", true);
+    return;
+  }
+
+  const button = $("telegram-button");
+  button.disabled = true;
+  button.textContent = "Menyiapkan foto...";
+
+  const files = [receiptFile, ...supportingFiles];
+  const caption =
+    $("telegram-caption").value.trim() || makeCaption();
+
+  try {
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files })
+    ) {
+      await navigator.share({
+        title: "Bukti Pengeluaran Telkom Akses",
+        text: caption,
+        files
+      });
+
+      showMessage(
+        "supporting-message",
+        "Menu berbagi berhasil dibuka. Pilih Telegram jika tersedia."
+      );
+    } else {
+      for (let i = 0; i < files.length; i++) {
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(files[i]);
+
+        link.href = url;
+        link.download = files[i].name || "bukti-pengeluaran.jpg";
+        link.click();
+
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
+
+      try {
+        await navigator.clipboard.writeText(caption);
+      } catch (error) {
+        $("telegram-caption").value = caption;
+      }
+
+      window.open("https://web.telegram.org/", "_blank");
+
+      showMessage(
+        "supporting-message",
+        "Foto diunduh dan caption disalin jika izin clipboard tersedia. Lampirkan foto di Telegram."
+      );
+    }
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      showMessage("supporting-message", error.message, true);
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = "Teruskan Foto dan Data";
+  }
+});
+
+function checkServer() {
+  $("server-status").textContent =
+    "Backend Google Apps Script: " + GAS_WEB_APP_URL;
+}
+
+checkServer();
+updateBBM();
 const $ = id => document.getElementById(id);
 
 let receiptFile = null;
