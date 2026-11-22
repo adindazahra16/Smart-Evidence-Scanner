@@ -1,0 +1,69 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tes Kamera</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    video {
+      width: 100%;
+      max-width: 500px;
+      background: #222;
+      border-radius: 12px;
+    }
+    button {
+      padding: 12px 20px;
+      margin: 8px;
+      background: #d71920;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>Tes Kamera AI Smart Expense Evidence</h2>
+  <video id="video" autoplay playsinline></video>
+  <p id="status">Kamera belum dibuka.</p>
+  <button onclick="startCamera()">BUKA KAMERA</button>
+  <button onclick="stopCamera()">TUTUP KAMERA</button>
+
+  <script>
+    let stream;
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" }
+          },
+          audio: false
+        });
+
+        document.getElementById("video").srcObject = stream;
+        document.getElementById("status").textContent =
+          "Kamera berhasil dibuka!";
+      } catch (error) {
+        document.getElementById("status").textContent =
+          "Kamera gagal dibuka: " + error.message;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("video").srcObject = null;
+      document.getElementById("status").textContent =
+        "Kamera ditutup.";
+    }
+  </script>
+</body>
+</html>
