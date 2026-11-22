@@ -1,5 +1,5 @@
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 const GAS_WEB_APP_URL =
   "https://script.google.com/macros/s/AKfycbwbr3V2prmOTXXqff-DxAqr4gbEurNBzkjNQQNjOqGZMM9i1xIUcZKqgj_UvPbPoWjA/exec";
@@ -9,189 +9,205 @@ let supportingFiles = [];
 let cameraStream = null;
 let activeCameraTarget = null;
 
-const receiptCamera = $("receipt-camera");
-const receiptGallery = $("receipt-gallery");
-const supportingCamera = $("supporting-camera");
-const supportingGallery = $("supporting-gallery");
+const receiptInput = $("receipt-gallery");
+const receiptCameraInput = $("receipt-camera");
+const supportingInput = $("supporting-gallery");
+const supportingCameraInput = $("supporting-camera");
 
-const receiptPreview = $("receipt-preview");
-const supportingPreview = $("supporting-preview");
-
-function showMessage(id, message, color = "#555") {
+function showMessage(id, message, color = "") {
   const element = $(id);
   if (!element) return;
+
   element.textContent = message;
   element.style.color = color;
 }
 
-function checkServer() {
-  fetch(GAS_WEB_APP_URL)
-    .then((response) => {
-      if (!response.ok) throw new Error("Server tidak aktif");
-      return response.text();
-    })
-    .then(() => showMessage("server-status", "Server aktif", "#16803c"))
-    .catch(() => showMessage("server-status", "Server tidak terhubung", "#c62828"));
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Gagal membaca foto."));
+
+    reader.readAsDataURL(file);
+  });
 }
 
-// ===============================
-// PILIH FOTO
-// ===============================
+function dataURLToFile(dataURL, filename) {
+  const parts = dataURL.split(",");
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const binary = atob(parts[1]);
+  const array = new Uint8Array(binary.length);
 
-$("receipt-camera-button")?.addEventListener("click", () => receiptCamera?.click());
-$("receipt-gallery-button")?.addEventListener("click", () => receiptGallery?.click());
+  for (let i = 0; i < binary.length; i++) {
+    array[i] = binary.charCodeAt(i);
+  }
 
-$("supporting-camera-button")?.addEventListener("click", () => supportingCamera?.click());
-$("supporting-gallery-button")?.addEventListener("click", () => supportingGallery?.click());
+  return new File([array], filename, { type: mime });
+}
 
-function renderPreview(files, container, type) {
+async function compressForAI(file) {
+  const dataURL = await fileToDataURL(file);
+  const image = new Image();
+
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error("Foto tidak dapat dibuka."));
+    image.src = dataURL;
+  });
+
+  const maxWidth = 1600;
+  const scale = Math.min(1, maxWidth / image.width);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const compressed = canvas.toDataURL("image/jpeg", 0.78);
+
+  return {
+    imageBase64: compressed.split(",")[1],
+    mimeType: "image/jpeg"
+  };
+}
+
+function renderReceiptPreview() {
+  const container = $("receipt-preview");
   if (!container) return;
 
   container.innerHTML = "";
 
-  files.forEach((file, index) => {
+  if (!receiptFile) {
+    container.textContent = "Belum ada foto nota.";
+    return;
+  }
+
+  const image = document.createElement("img");
+  image.src = URL.createObjectURL(receiptFile);
+  image.alt = "Foto nota";
+  image.style.maxWidth = "100%";
+  image.style.maxHeight = "300px";
+  image.style.objectFit = "contain";
+
+  container.appendChild(image);
+}
+
+function renderSupportingPreview() {
+  const container = $("supporting-preview");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!supportingFiles.length) {
+    container.textContent = "Belum ada foto dokumentasi.";
+    return;
+  }
+
+  supportingFiles.forEach((file, index) => {
     const wrapper = document.createElement("div");
-    wrapper.className = "preview-item";
+    wrapper.style.display = "inline-flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.margin = "8px";
+    wrapper.style.maxWidth = "130px";
 
     const image = document.createElement("img");
     image.src = URL.createObjectURL(file);
-    image.alt = "Foto " + (index + 1);
-
-    const name = document.createElement("p");
-    name.textContent = file.name;
+    image.alt = "Foto kegiatan " + (index + 1);
+    image.style.width = "120px";
+    image.style.height = "100px";
+    image.style.objectFit = "cover";
+    image.style.borderRadius = "8px";
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Hapus";
+    remove.style.marginTop = "5px";
 
     remove.addEventListener("click", () => {
-      if (type === "receipt") {
-        receiptFile = null;
-        if (receiptCamera) receiptCamera.value = "";
-        if (receiptGallery) receiptGallery.value = "";
-        renderPreview([], receiptPreview, "receipt");
-        showMessage("scan-message", "Foto nota dihapus.");
-      } else {
-        supportingFiles.splice(index, 1);
-        renderPreview(supportingFiles, supportingPreview, "supporting");
-        showMessage("supporting-message", supportingFiles.length + " foto pendukung dipilih.");
-      }
+      supportingFiles.splice(index, 1);
+      renderSupportingPreview();
     });
 
-    wrapper.append(image, name, remove);
+    wrapper.appendChild(image);
+    wrapper.appendChild(remove);
     container.appendChild(wrapper);
   });
-}
-
-function acceptReceipt(file) {
-  if (!file || !file.type.startsWith("image/")) {
-    showMessage("scan-message", "Pilih foto nota yang valid.", "#c62828");
-    return;
-  }
-
-  receiptFile = file;
-  renderPreview([file], receiptPreview, "receipt");
-  showMessage("scan-message", "Foto nota berhasil dipilih.", "#16803c");
-}
-
-function acceptSupporting(files) {
-  const valid = Array.from(files).filter((file) => file.type.startsWith("image/"));
-
-  supportingFiles.push(...valid);
-  renderPreview(supportingFiles, supportingPreview, "supporting");
 
   showMessage(
     "supporting-message",
-    supportingFiles.length + " foto pendukung dipilih.",
-    "#16803c"
+    supportingFiles.length + " foto dokumentasi dipilih."
   );
 }
 
-receiptCamera?.addEventListener("change", (e) => acceptReceipt(e.target.files[0]));
-receiptGallery?.addEventListener("change", (e) => acceptReceipt(e.target.files[0]));
+function addSupportingFiles(files) {
+  const validFiles = Array.from(files).filter(file =>
+    file.type.startsWith("image/")
+  );
 
-supportingCamera?.addEventListener("change", (e) => acceptSupporting(e.target.files));
-supportingGallery?.addEventListener("change", (e) => acceptSupporting(e.target.files));
+  supportingFiles.push(...validFiles);
 
-// ===============================
-// KAMERA LANGSUNG
-// ===============================
+  renderSupportingPreview();
+}
 
-function createWebcamControls() {
-  ["receipt", "supporting"].forEach((target) => {
-    const container = $(target + "-webcam");
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+  }
 
-    if (!container || $("#" + target + "-direct-camera-button")) return;
+  cameraStream = null;
+  activeCameraTarget = null;
 
-    const button = document.createElement("button");
-    button.id = target + "-direct-camera-button";
-    button.type = "button";
-    button.textContent = "Kamera Langsung";
-
-    button.addEventListener("click", () => openWebcam(target));
-
-    container.parentNode.insertBefore(button, container);
+  ["receipt-webcam", "supporting-webcam"].forEach(id => {
+    const container = $(id);
+    if (container) container.hidden = true;
   });
 }
 
-async function openWebcam(target) {
-  closeWebcam();
-
-  const container = $(target + "-webcam");
-  const video = $(target + "-video");
-
-  if (!container || !video) {
-    alert("Area kamera tidak ditemukan.");
-    return;
-  }
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    alert("Browser tidak mendukung kamera langsung. Gunakan tombol Buka Kamera.");
-    return;
-  }
-
+async function openCamera(target) {
   try {
+    stopCamera();
+
+    const container = $(target + "-webcam");
+    const video = $(target + "-video");
+
+    if (!container || !video) {
+      alert("Komponen kamera tidak ditemukan.");
+      return;
+    }
+
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
+      video: {
+        facingMode: { ideal: "environment" }
+      },
       audio: false
     });
 
     activeCameraTarget = target;
     video.srcObject = cameraStream;
-    container.style.display = "block";
+    container.hidden = false;
+
     await video.play();
+
   } catch (error) {
-    console.error(error);
-    alert("Kamera tidak dapat dibuka. Periksa izin kamera browser.");
-    closeWebcam();
+    alert(
+      "Kamera tidak dapat dibuka. Pastikan izin kamera diberikan dan gunakan HTTPS."
+    );
   }
 }
 
-function closeWebcam() {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach((track) => track.stop());
-    cameraStream = null;
+function takePhoto(target) {
+  if (!cameraStream || activeCameraTarget !== target) {
+    alert("Kamera belum aktif.");
+    return;
   }
 
-  ["receipt", "supporting"].forEach((target) => {
-    const container = $(target + "-webcam");
-    const video = $(target + "-video");
-
-    if (video) video.srcObject = null;
-    if (container) container.style.display = "none";
-  });
-
-  activeCameraTarget = null;
-}
-
-function capturePhoto() {
-  if (!cameraStream || !activeCameraTarget) return;
-
-  const target = activeCameraTarget;
   const video = $(target + "-video");
 
-  if (!video?.videoWidth) {
-    alert("Kamera belum siap.");
+  if (!video.videoWidth || !video.videoHeight) {
+    alert("Kamera belum siap. Coba lagi.");
     return;
   }
 
@@ -199,9 +215,15 @@ function capturePhoto() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  canvas.getContext("2d").drawImage(video, 0, 0);
+  canvas.getContext("2d").drawImage(
+    video,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
 
-  canvas.toBlob((blob) => {
+  canvas.toBlob(blob => {
     if (!blob) {
       alert("Gagal mengambil foto.");
       return;
@@ -209,46 +231,109 @@ function capturePhoto() {
 
     const file = new File(
       [blob],
-      target + "-" + Date.now() + ".jpg",
+      "foto-" + Date.now() + ".jpg",
       { type: "image/jpeg" }
     );
 
-    if (target === "receipt") acceptReceipt(file);
-    else acceptSupporting([file]);
+    if (target === "receipt") {
+      receiptFile = file;
+      renderReceiptPreview();
+    } else {
+      supportingFiles.push(file);
+      renderSupportingPreview();
+    }
 
-    closeWebcam();
-  }, "image/jpeg", 0.9);
+    stopCamera();
+  }, "image/jpeg", 0.92);
 }
 
-$("receipt-take-photo")?.addEventListener("click", capturePhoto);
-$("supporting-take-photo")?.addEventListener("click", capturePhoto);
-$("receipt-close-camera")?.addEventListener("click", closeWebcam);
-$("supporting-close-camera")?.addEventListener("click", closeWebcam);
+function updateBBMFields() {
+  const category = $("kategori")?.value || "";
+  const fields = $("bbm-fields");
 
-// ===============================
-// SCAN AI
-// ===============================
+  if (fields) {
+    fields.hidden = category !== "BBM";
+  }
+}
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+function fillScanResult(data) {
+  const fields = [
+    "tanggal",
+    "nominal",
+    "vendor",
+    "kategori",
+    "kegiatan",
+    "volume",
+    "harga_satuan",
+    "plat",
+    "kilometer",
+    "keterangan"
+  ];
 
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+  fields.forEach(field => {
+    const element = $(field);
+    if (element && data[field] !== undefined) {
+      element.value = data[field] ?? "";
+    }
   });
+
+  updateBBMFields();
+  updateTelegramCaption();
+}
+
+function getScanData() {
+  return {
+    tanggal: $("tanggal")?.value || "",
+    nominal: $("nominal")?.value || "",
+    vendor: $("vendor")?.value || "",
+    kategori: $("kategori")?.value || "",
+    kegiatan: $("kegiatan")?.value || "",
+    volume: $("volume")?.value || "",
+    harga_satuan: $("harga_satuan")?.value || "",
+    plat: $("plat")?.value || "",
+    kilometer: $("kilometer")?.value || "",
+    keterangan: $("keterangan")?.value || ""
+  };
+}
+
+function updateTelegramCaption() {
+  const data = getScanData();
+
+  const lines = [
+    "DOKUMENTASI BUKTI PENGELUARAN",
+    "",
+    "Tanggal: " + data.tanggal,
+    "Nominal: " + data.nominal,
+    "Vendor: " + data.vendor,
+    "Kategori: " + data.kategori,
+    "Kegiatan: " + data.kegiatan
+  ];
+
+  if (data.kategori === "BBM") {
+    lines.push("Kendaraan: " + data.plat);
+    lines.push("Kilometer: " + data.kilometer);
+  }
+
+  if (data.keterangan) {
+    lines.push("Keterangan: " + data.keterangan);
+  }
+
+  const caption = $("telegram-caption");
+  if (caption) caption.value = lines.join("\n");
 }
 
 function sendToBackend(payload) {
   return new Promise((resolve, reject) => {
     const iframe = document.createElement("iframe");
-    iframe.name = "scan-frame-" + Date.now();
+    const form = document.createElement("form");
+    const requestId = "scan-" + Date.now();
+
+    iframe.name = requestId;
     iframe.style.display = "none";
 
-    const form = document.createElement("form");
     form.method = "POST";
     form.action = GAS_WEB_APP_URL;
-    form.target = iframe.name;
+    form.target = requestId;
     form.style.display = "none";
 
     const input = document.createElement("input");
@@ -257,446 +342,299 @@ function sendToBackend(payload) {
     input.value = JSON.stringify(payload);
 
     form.appendChild(input);
-    document.body.append(iframe, form);
 
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Waktu pemeriksaan habis. Silakan coba lagi."));
-    }, 90000);
+    let finished = false;
 
-    function cleanup() {
+    const cleanup = () => {
+      window.removeEventListener("message", onMessage);
       clearTimeout(timeout);
-      window.removeEventListener("message", receiveMessage);
       form.remove();
       iframe.remove();
-    }
+    };
 
-    function receiveMessage(event) {
-      if (event.source !== iframe.contentWindow) return;
+    const finish = (callback, result) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      callback(result);
+    };
 
+    const onMessage = event => {
       let result = event.data;
 
-      if (!result) return;
-
-      try {
-        if (typeof result === "string") result = JSON.parse(result);
-        cleanup();
-        resolve(result);
-      } catch {
-        // Abaikan pesan yang bukan hasil scan.
+      if (typeof result === "string") {
+        try {
+          result = JSON.parse(result);
+        } catch {
+          return;
+        }
       }
-    }
 
-    window.addEventListener("message", receiveMessage);
+      if (
+        !result ||
+        typeof result.success !== "boolean"
+      ) {
+        return;
+      }
+
+      if (result.success) {
+        finish(resolve, result.data);
+      } else {
+        finish(
+          reject,
+          new Error(result.error || "Gagal membaca nota.")
+        );
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      finish(
+        reject,
+        new Error(
+          "Waktu pemeriksaan habis. Silakan coba lagi."
+        )
+      );
+    }, 150000);
+
+    window.addEventListener("message", onMessage);
+
+    document.body.appendChild(iframe);
+    document.body.appendChild(form);
+
     form.submit();
   });
 }
 
-function setField(id, value) {
-  const element = $(id);
-  if (!element || value === undefined || value === null) return;
-
-  element.value = value;
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function normalizeDate(value) {
-  if (!value) return "";
-
-  const text = String(value).trim();
-
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return text;
-
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-
-  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
-
-  return text;
-}
-
-function applyScanResult(response) {
-  let data = response;
-
-  if (data?.data) data = data.data;
-  if (data?.result) data = data.result;
-
-  if (typeof data === "string") {
-    data = JSON.parse(data);
-  }
-
-  if (!data || typeof data !== "object") {
-    throw new Error("Hasil pemeriksaan kosong.");
-  }
-
-  setField("tanggal", normalizeDate(data.tanggal || data.date));
-  setField("nominal", data.nominal || data.amount);
-  setField("vendor", data.vendor || data.toko || data.merchant);
-  setField("kategori", String(data.kategori || data.category || "TIDAK DIKETAHUI").toUpperCase());
-  setField("kegiatan", data.kegiatan || data.activity);
-  setField("volume", data.volume || data.jumlah_volume);
-  setField("harga_satuan", data.harga_satuan || data.unit_price);
-  setField("plat", data.plat || data.nomor_polisi || data.plate);
-  setField("kilometer", data.kilometer || data.km);
-  setField("keterangan", data.keterangan || data.catatan || data.notes);
-
-  updateBBM();
-}
-
-$("scan-button")?.addEventListener("click", async () => {
+async function scanReceipt() {
   if (!receiptFile) {
-    showMessage("scan-message", "Pilih foto nota terlebih dahulu.", "#c62828");
+    alert("Silakan pilih atau ambil foto nota terlebih dahulu.");
     return;
   }
 
   const button = $("scan-button");
-  button.disabled = true;
-  button.textContent = "AI sedang memeriksa nota...";
-
-  showMessage("scan-message", "Sedang memproses foto nota...");
 
   try {
-    const image = await fileToBase64(receiptFile);
-
-    const result = await sendToBackend({
-      image,
-      mimeType: receiptFile.type
-    });
-
-    if (result.success === false) {
-      throw new Error(result.message || "Pemeriksaan gagal.");
-    }
-
-    applyScanResult(result);
+    button.disabled = true;
+    button.textContent = "AI Sedang Memeriksa...";
 
     showMessage(
       "scan-message",
-      "Pemeriksaan selesai. Periksa kembali hasilnya.",
-      "#16803c"
+      "AI sedang membaca foto nota. Mohon tunggu..."
     );
+
+    const compressed = await compressForAI(receiptFile);
+
+    const result = await sendToBackend({
+      image: compressed.imageBase64,
+      mimeType: compressed.mimeType
+    });
+
+    fillScanResult(result);
+
+    showMessage(
+      "scan-message",
+      "Nota berhasil diperiksa. Silakan periksa kembali hasilnya.",
+      "green"
+    );
+
   } catch (error) {
     console.error(error);
-    showMessage("scan-message", error.message || "Gagal memeriksa nota.", "#c62828");
+
+    showMessage(
+      "scan-message",
+      error.message || "Terjadi kesalahan saat membaca nota.",
+      "red"
+    );
+
   } finally {
     button.disabled = false;
     button.textContent = "Periksa Nota dengan AI";
   }
-});
-
-// ===============================
-// KATEGORI BBM
-// ===============================
-
-function updateBBM() {
-  const category = $("kategori");
-  const fields = $("bbm-fields");
-
-  if (!category || !fields) return;
-
-  fields.style.display = category.value.toUpperCase() === "BBM" ? "block" : "none";
 }
 
-$("kategori")?.addEventListener("change", updateBBM);
+async function loadImage(file) {
+  const dataURL = await fileToDataURL(file);
+  const image = new Image();
 
-// ===============================
-// PEMBUATAN PDF SATU HALAMAN
-// ===============================
-
-function getActivity() {
-  return $("kegiatan")?.value?.trim() ||
-    $("keterangan")?.value?.trim() ||
-    "Keterangan kegiatan belum diisi.";
-}
-
-function imageToJpeg(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const image = new Image();
-
-      image.onload = () => {
-        const maxWidth = 1800;
-        const scale = Math.min(1, maxWidth / image.width);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(image.width * scale);
-        canvas.height = Math.round(image.height * scale);
-
-        canvas.getContext("2d").drawImage(
-          image,
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
-      };
-
-      image.onerror = reject;
-      image.src = reader.result;
-    };
-
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = dataURL;
   });
+
+  return {
+    dataURL,
+    width: image.width,
+    height: image.height
+  };
 }
 
-function addContainedImage(doc, data, x, y, boxWidth, boxHeight) {
-  const properties = doc.getImageProperties(data);
-
+function fitImage(doc, image, x, y, maxWidth, maxHeight) {
   const ratio = Math.min(
-    boxWidth / properties.width,
-    boxHeight / properties.height
+    maxWidth / image.width,
+    maxHeight / image.height
   );
 
-  const width = properties.width * ratio;
-  const height = properties.height * ratio;
+  const width = image.width * ratio;
+  const height = image.height * ratio;
 
-  const imageX = x + (boxWidth - width) / 2;
-  const imageY = y + (boxHeight - height) / 2;
-
-  doc.addImage(data, "JPEG", imageX, imageY, width, height);
+  doc.addImage(
+    image.dataURL,
+    "JPEG",
+    x + (maxWidth - width) / 2,
+    y + (maxHeight - height) / 2,
+    width,
+    height
+  );
 }
 
 async function createPDF() {
   if (!receiptFile) {
-    alert("Foto nota wajib dipilih terlebih dahulu.");
+    alert("Foto nota harus tersedia untuk membuat PDF.");
     return;
   }
 
   if (!window.jspdf?.jsPDF) {
-    alert("Fitur PDF belum siap. Periksa pustaka PDF pada index.html.");
+    alert("Fitur PDF belum tersedia. Periksa koneksi internet.");
     return;
   }
 
   const button = $("pdf-button");
-  button.disabled = true;
-  button.textContent = "Membuat PDF...";
 
   try {
-    const { jsPDF } = window.jspdf;
+    button.disabled = true;
+    button.textContent = "Membuat PDF...";
 
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-      compress: true
-    });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
 
     const pageWidth = 210;
     const margin = 12;
     const contentWidth = pageWidth - margin * 2;
 
-    // HEADER
-    doc.setFillColor(190, 0, 0);
-    doc.rect(0, 0, pageWidth, 27, "F");
+    let y = 12;
 
-    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(17);
-    doc.text("TELKOM AKSES", pageWidth / 2, 12, { align: "center" });
+    doc.setFontSize(15);
+    doc.text("DOKUMENTASI BUKTI PENGELUARAN", margin, y);
 
-    doc.setFontSize(10);
-    doc.text("BUKTI PENGELUARAN", pageWidth / 2, 20, { align: "center" });
-
-    // FOTO NOTA
-    doc.setTextColor(35, 35, 35);
-    doc.setFontSize(11);
-    doc.text("FOTO NOTA", margin, 35);
-
-    const receiptImage = await imageToJpeg(receiptFile);
-
-    doc.setDrawColor(190, 0, 0);
-    doc.roundedRect(margin, 39, contentWidth, 105, 2, 2);
-
-    addContainedImage(
-      doc,
-      receiptImage,
-      margin + 3,
-      42,
-      contentWidth - 6,
-      99
-    );
-
-    // FOTO KEGIATAN
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("FOTO KEGIATAN", margin, 153);
-
-    // Maksimal 4 foto pendukung agar satu halaman.
-    const selectedPhotos = supportingFiles.slice(0, 4);
-    const photoData = await Promise.all(
-      selectedPhotos.map((file) => imageToJpeg(file))
-    );
-
-    if (photoData.length === 1) {
-      doc.setDrawColor(190, 0, 0);
-      doc.roundedRect(margin, 157, contentWidth, 57, 2, 2);
-
-      addContainedImage(
-        doc,
-        photoData[0],
-        margin + 3,
-        160,
-        contentWidth - 6,
-        51
-      );
-    } else if (photoData.length > 1) {
-      const gap = 5;
-      const boxWidth = (contentWidth - gap) / 2;
-      const boxHeight = 43;
-
-      photoData.forEach((data, index) => {
-        const column = index % 2;
-        const row = Math.floor(index / 2);
-
-        const x = margin + column * (boxWidth + gap);
-        const y = 157 + row * (boxHeight + gap);
-
-        doc.setDrawColor(190, 0, 0);
-        doc.roundedRect(x, y, boxWidth, boxHeight, 2, 2);
-
-        addContainedImage(
-          doc,
-          data,
-          x + 2,
-          y + 2,
-          boxWidth - 4,
-          boxHeight - 4
-        );
-      });
-    } else {
-      doc.setDrawColor(190, 0, 0);
-      doc.roundedRect(margin, 157, contentWidth, 45, 2, 2);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(120, 120, 120);
-      doc.text(
-        "Tidak ada foto kegiatan yang dilampirkan.",
-        pageWidth / 2,
-        181,
-        { align: "center" }
-      );
-    }
-
-    // KETERANGAN KEGIATAN
-    const activityY = photoData.length > 2 ? 263 :
-      photoData.length === 2 ? 212 :
-      photoData.length === 1 ? 222 : 211;
-
-    doc.setTextColor(35, 35, 35);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("KETERANGAN KEGIATAN", margin, activityY);
+    y += 9;
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+    doc.setFontSize(9);
+    doc.text("Foto Nota", margin, y);
 
-    const lines = doc.splitTextToSize(getActivity(), contentWidth);
-    doc.text(lines.slice(0, 3), margin, activityY + 7);
+    y += 3;
 
-    // FOOTER
-    doc.setDrawColor(190, 0, 0);
-    doc.line(margin, 282, pageWidth - margin, 282);
+    const receiptImage = await loadImage(receiptFile);
 
-    doc.setFontSize(8);
-    doc.setTextColor(110, 110, 110);
-    doc.text(
-      "AI SMART EXPENSE EVIDENCE - TELKOM AKSES",
-      pageWidth / 2,
-      288,
-      { align: "center" }
+    fitImage(
+      doc,
+      receiptImage,
+      margin,
+      y,
+      contentWidth,
+      83
     );
 
-    const date = new Date().toISOString().slice(0, 10);
-    doc.save("Bukti-Pengeluaran-" + date + ".pdf");
+    y += 88;
 
-    showMessage("scan-message", "PDF berhasil dibuat dan diunduh.", "#16803c");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Dokumentasi Kegiatan", margin, y);
 
-    if (supportingFiles.length > 4) {
-      alert("PDF tetap satu halaman. " + (supportingFiles.length - 4) +
-        " foto pendukung tidak dimasukkan karena batas ruang.");
+    y += 4;
+
+    const photos = supportingFiles.slice(0, 4);
+    const gap = 4;
+    const cellWidth = (contentWidth - gap) / 2;
+    const cellHeight = 34;
+
+    for (let i = 0; i < photos.length; i++) {
+      const image = await loadImage(photos[i]);
+
+      const column = i % 2;
+      const row = Math.floor(i / 2);
+
+      const x = margin + column * (cellWidth + gap);
+      const photoY = y + row * (cellHeight + gap);
+
+      fitImage(
+        doc,
+        image,
+        x,
+        photoY,
+        cellWidth,
+        cellHeight
+      );
     }
+
+    y += photos.length ? 2 * (cellHeight + gap) : 0;
+    y += 3;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Uraian Kegiatan", margin, y);
+
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+
+    const activity = $("kegiatan")?.value?.trim()
+      || "Uraian kegiatan belum diisi.";
+
+    const lines = doc.splitTextToSize(
+      activity,
+      contentWidth
+    );
+
+    const availableHeight = 297 - y - 12;
+    const maxLines = Math.max(
+      1,
+      Math.floor(availableHeight / 4.5)
+    );
+
+    doc.text(lines.slice(0, maxLines), margin, y);
+
+    doc.save("Dokumentasi-Bukti-Pengeluaran.pdf");
+
+    showMessage(
+      "supporting-message",
+      "PDF berhasil dibuat."
+    );
+
   } catch (error) {
     console.error(error);
     alert("Gagal membuat PDF: " + error.message);
+
   } finally {
     button.disabled = false;
-    button.textContent = "Buat PDF";
+    button.textContent = "Buat PDF A4";
   }
 }
 
-// BUAT TOMBOL PDF OTOMATIS
-function createPDFButton() {
-  if ($("pdf-button")) return;
-
-  const button = document.createElement("button");
-  button.id = "pdf-button";
-  button.type = "button";
-  button.textContent = "Buat PDF";
-  button.style.background = "#C00000";
-  button.style.color = "#ffffff";
-  button.style.border = "none";
-  button.style.padding = "12px 20px";
-  button.style.borderRadius = "8px";
-  button.style.fontWeight = "bold";
-  button.style.cursor = "pointer";
-  button.style.margin = "10px 5px";
-
-  button.addEventListener("click", createPDF);
-
-  const telegramButton = $("telegram-button");
-
-  if (telegramButton?.parentNode) {
-    telegramButton.parentNode.insertBefore(button, telegramButton);
-  } else {
-    document.body.appendChild(button);
-  }
-}
-
-// ===============================
-// TELEGRAM
-// ===============================
-
-function createTelegramCaption() {
-  const value = (id) => $(id)?.value?.trim() || "-";
-
-  return [
-    "AI SMART EXPENSE EVIDENCE",
-    "",
-    "Tanggal: " + value("tanggal"),
-    "Nominal: " + value("nominal"),
-    "Vendor: " + value("vendor"),
-    "Kategori: " + value("kategori"),
-    "Kegiatan: " + value("kegiatan"),
-    "Volume: " + value("volume"),
-    "Harga Satuan: " + value("harga_satuan"),
-    "Plat Nomor: " + value("plat"),
-    "Kilometer: " + value("kilometer"),
-    "Keterangan: " + value("keterangan")
-  ].join("\n");
-}
-
-async function shareToTelegram() {
+async function sendToTelegram() {
   if (!receiptFile) {
     alert("Foto nota belum dipilih.");
     return;
   }
 
+  const caption = $("telegram-caption")?.value || "";
   const files = [receiptFile, ...supportingFiles];
-  const caption = createTelegramCaption();
 
   try {
-    if (navigator.share && navigator.canShare &&
-        navigator.canShare({ files })) {
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files })
+    ) {
       await navigator.share({
-        title: "AI Smart Expense Evidence",
+        title: "Dokumentasi Bukti Pengeluaran",
         text: caption,
         files
       });
+
       return;
     }
 
@@ -705,7 +643,7 @@ async function shareToTelegram() {
       const link = document.createElement("a");
 
       link.href = url;
-      link.download = files[i].name || `foto-${i + 1}.jpg`;
+      link.download = files[i].name || `dokumentasi-${i + 1}.jpg`;
 
       document.body.appendChild(link);
       link.click();
@@ -714,24 +652,155 @@ async function shareToTelegram() {
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
-    await navigator.clipboard.writeText(caption);
-    window.open("https://web.telegram.org/", "_blank");
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(caption);
+    }
 
-    alert("Foto diunduh dan caption disalin. Silakan lampirkan foto di Telegram.");
+    const telegramURL =
+      "https://t.me/share/url?url=&text=" +
+      encodeURIComponent(caption);
+
+    window.open(telegramURL, "_blank");
+
+    alert(
+      "Foto sudah diunduh dan keterangan disalin jika izin clipboard tersedia. Lampirkan foto di Telegram."
+    );
+
   } catch (error) {
-    if (error.name === "AbortError") return;
-    console.error(error);
-    alert("Gagal membagikan file.");
+    if (error.name !== "AbortError") {
+      alert("Tidak dapat membuka fitur berbagi: " + error.message);
+    }
   }
 }
 
-$("telegram-button")?.addEventListener("click", shareToTelegram);
+function createPDFButton() {
+  if ($("pdf-button")) return;
 
-// ===============================
-// MULAI APLIKASI
-// ===============================
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "pdf-button";
+  button.textContent = "Buat PDF A4";
 
-createWebcamControls();
-createPDFButton();
-checkServer();
-updateBBM();
+  button.addEventListener("click", createPDF);
+
+  const section = $("supporting-message")?.closest(".card")
+    || $("telegram-button")?.closest(".card");
+
+  if (section) {
+    section.appendChild(button);
+  }
+}
+
+function initializeApp() {
+  $("receipt-camera-button")?.addEventListener(
+    "click",
+    () => openCamera("receipt")
+  );
+
+  $("supporting-camera-button")?.addEventListener(
+    "click",
+    () => openCamera("supporting")
+  );
+
+  $("receipt-gallery-button")?.addEventListener(
+    "click",
+    () => receiptInput?.click()
+  );
+
+  $("supporting-gallery-button")?.addEventListener(
+    "click",
+    () => supportingInput?.click()
+  );
+
+  $("receipt-take-photo")?.addEventListener(
+    "click",
+    () => takePhoto("receipt")
+  );
+
+  $("supporting-take-photo")?.addEventListener(
+    "click",
+    () => takePhoto("supporting")
+  );
+
+  $("receipt-close-camera")?.addEventListener(
+    "click",
+    stopCamera
+  );
+
+  $("supporting-close-camera")?.addEventListener(
+    "click",
+    stopCamera
+  );
+
+  receiptInput?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      receiptFile = file;
+      renderReceiptPreview();
+    }
+
+    event.target.value = "";
+  });
+
+  receiptCameraInput?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      receiptFile = file;
+      renderReceiptPreview();
+    }
+
+    event.target.value = "";
+  });
+
+  supportingInput?.addEventListener("change", event => {
+    addSupportingFiles(event.target.files || []);
+    event.target.value = "";
+  });
+
+  supportingCameraInput?.addEventListener("change", event => {
+    addSupportingFiles(event.target.files || []);
+    event.target.value = "";
+  });
+
+  $("scan-button")?.addEventListener("click", scanReceipt);
+
+  $("kategori")?.addEventListener(
+    "change",
+    updateBBMFields
+  );
+
+  [
+    "tanggal",
+    "nominal",
+    "vendor",
+    "kategori",
+    "kegiatan",
+    "plat",
+    "kilometer",
+    "keterangan"
+  ].forEach(id => {
+    $(id)?.addEventListener(
+      "input",
+      updateTelegramCaption
+    );
+  });
+
+  $("telegram-button")?.addEventListener(
+    "click",
+    sendToTelegram
+  );
+
+  createPDFButton();
+  updateBBMFields();
+  renderReceiptPreview();
+  renderSupportingPreview();
+
+  showMessage(
+    "server-status",
+    "Aplikasi siap digunakan."
+  );
+}
+
+document.addEventListener("DOMContentLoaded", initializeApp);
