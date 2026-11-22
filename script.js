@@ -420,7 +420,8 @@ Catatan: ${catatan || "Belum diisi"}
 AI Smart Expense Evidence`;
 }
 
-// BAGIKAN KE TELEGRAM
+
+// BAGIKAN FOTO DAN CAPTION
 telegramButton.addEventListener("click", async () => {
   if (!receiptFile) {
     alert("Foto nota belum tersedia.");
@@ -428,14 +429,10 @@ telegramButton.addEventListener("click", async () => {
   }
 
   if ($("kategori").value === "BBM") {
-    const plat = $("plat").value.trim();
-    const kilometer = $("kilometer").value.trim();
-
-    if (!plat || !kilometer) {
+    if (!$("plat").value.trim() || !$("kilometer").value.trim()) {
+      $("bbm-fields").hidden = false;
       $("bbm-message").textContent =
         "Lengkapi nomor plat dan kilometer kendaraan.";
-
-      $("bbm-fields").hidden = false;
       alert("Data wajib BBM belum lengkap.");
       return;
     }
@@ -446,55 +443,59 @@ telegramButton.addEventListener("click", async () => {
 
   const files = [receiptFile, ...supportingFiles];
 
-  try {
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files })
-    ) {
+  if (
+    navigator.share &&
+    navigator.canShare &&
+    navigator.canShare({ files })
+  ) {
+    try {
       await navigator.share({
         title: "Bukti Transaksi Operasional",
         text: caption,
-        files
+        files: files
       });
 
       return;
-    }
-
-    await navigator.clipboard.writeText(caption);
-
-    files.forEach((file, index) => {
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download =
-        (index === 0 ? "Nota-Utama-" : "Foto-Pendukung-") +
-        file.name;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-    });
-
-    window.open(
-      "https://t.me/share/url?url=&text=" +
-      encodeURIComponent(caption),
-      "_blank"
-    );
-
-    alert(
-      "Caption disalin dan semua foto diunduh. " +
-      "Lampirkan foto secara manual di Telegram."
-    );
-
-  } catch (error) {
-    if (error.name !== "AbortError") {
-      alert("Gagal menyiapkan Telegram: " + error.message);
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      console.error("Share gagal:", error);
     }
   }
+
+  // CADANGAN JIKA FITUR BERBAGI FILE TIDAK DIDUKUNG
+  try {
+    await navigator.clipboard.writeText(caption);
+  } catch (error) {
+    $("telegram-caption").focus();
+    $("telegram-caption").select();
+  }
+
+  files.forEach((file, index) => {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download =
+      (index === 0 ? "Nota-Utama-" : "Foto-Pendukung-") +
+      file.name;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  });
+
+  window.open(
+    "https://t.me/share/url?url=&text=" +
+    encodeURIComponent(caption),
+    "_blank"
+  );
+
+  alert(
+    "Foto sudah diunduh dan caption disiapkan. " +
+    "Lampirkan foto di Telegram jika menu berbagi file tidak tersedia."
+  );
 });
 
 // HENTIKAN KAMERA JIKA HALAMAN DITUTUP
