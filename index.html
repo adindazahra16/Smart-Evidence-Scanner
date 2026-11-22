@@ -1,132 +1,185 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Smart Expense Evidence</title>
+  <meta name="theme-color" content="#e60012">
+  <title>AI Smart Expense Evidence - Telkom Akses</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<header class="header">
-  <div class="brand">TELKOM AKSES</div>
-  <h1>AI Smart Expense Evidence</h1>
-  <p>Digitalisasi bukti pengeluaran dan nota perjalanan</p>
-</header>
+  <header class="header">
+    <div class="brand">TELKOM AKSES</div>
+    <h1>AI Smart Expense Evidence</h1>
+    <p>Digitalisasi dokumentasi bukti pengeluaran</p>
+  </header>
 
-<main class="container">
+  <main class="container">
 
-  <section class="panel">
-    <h2>1. Foto Nota</h2>
-    <p>Ambil foto nota menggunakan kamera atau pilih dari galeri.</p>
+    <section class="card">
+      <h2>1. Foto Nota</h2>
+      <p>Ambil foto nota menggunakan kamera atau pilih dari galeri.</p>
 
-    <input type="file" id="receipt-camera" accept="image/*" capture="environment" hidden>
-    <input type="file" id="receipt-gallery" accept="image/*" hidden>
-
-    <div class="button-group">
-      <button type="button" id="receipt-camera-button">Buka Kamera</button>
-      <button type="button" id="receipt-gallery-button">Pilih Galeri</button>
-    </div>
-
-    <div id="receipt-webcam" hidden>
-      <video id="receipt-video" autoplay playsinline></video>
       <div class="button-group">
-        <button type="button" id="receipt-take-photo">Ambil Foto</button>
-        <button type="button" id="receipt-close-camera">Tutup Kamera</button>
+        <button type="button" id="receipt-camera-button">Buka Kamera</button>
+        <button type="button" id="receipt-gallery-button">Pilih dari Galeri</button>
       </div>
-    </div>
 
-    <div id="receipt-preview"></div>
+      <input type="file" id="receipt-camera" accept="image/*" capture="environment" hidden>
+      <input type="file" id="receipt-gallery" accept="image/*" hidden>
 
-    <button type="button" id="scan-button" class="primary-button">
-      Periksa Nota dengan AI
-    </button>
-    <p id="scan-message"></p>
-  </section>
+      <div id="receipt-webcam" hidden>
+        <video id="receipt-video" autoplay playsinline></video>
+        <div class="button-group">
+          <button type="button" id="receipt-take-photo">Ambil Foto</button>
+          <button type="button" id="receipt-close-camera">Tutup Kamera</button>
+        </div>
+      </div>
 
-  <section class="panel">
-    <h2>2. Foto Pendukung</h2>
-    <p>Tambahkan foto pendukung jika diperlukan.</p>
+      <div id="receipt-preview"></div>
 
-    <input type="file" id="supporting-camera" accept="image/*" capture="environment" hidden>
-    <input type="file" id="supporting-gallery" accept="image/*" multiple hidden>
+      <button type="button" id="scan-button">Periksa Nota dengan AI</button>
+      <p id="scan-message" role="status"></p>
+    </section>
 
-    <div class="button-group">
-      <button type="button" id="supporting-camera-button">Buka Kamera</button>
-      <button type="button" id="supporting-gallery-button">Pilih Galeri</button>
-    </div>
+    <section class="card">
+      <h2>2. Hasil Pemeriksaan Nota</h2>
+      <p>Periksa dan koreksi hasil pembacaan AI jika diperlukan.</p>
 
-    <div id="supporting-preview"></div>
-    <p id="supporting-message"></p>
-  </section>
+      <div class="form-group">
+        <label for="tanggal">Tanggal</label>
+        <input type="text" id="tanggal" placeholder="DD/MM/YYYY">
+      </div>
 
-  <section class="panel">
-    <h2>3. Hasil Pembacaan Nota</h2>
+      <div class="form-group">
+        <label for="nominal">Nominal</label>
+        <input type="text" id="nominal" placeholder="Nominal pengeluaran">
+      </div>
 
-    <label>Tanggal</label>
-    <input type="text" id="tanggal" placeholder="DD/MM/YYYY">
+      <div class="form-group">
+        <label for="vendor">Nama Vendor / Toko</label>
+        <input type="text" id="vendor" placeholder="Nama vendor">
+      </div>
 
-    <label>Nominal</label>
-    <input type="text" id="nominal" placeholder="Nominal pengeluaran">
+      <div class="form-group">
+        <label for="kategori">Kategori Pengeluaran</label>
+        <select id="kategori">
+          <option value="">Pilih kategori</option>
+          <option value="BBM">BBM</option>
+          <option value="MAKAN">MAKAN</option>
+          <option value="MATERIAL">MATERIAL</option>
+          <option value="PENGINAPAN">PENGINAPAN</option>
+          <option value="TRANSPORTASI">TRANSPORTASI</option>
+          <option value="PENGIRIMAN">PENGIRIMAN</option>
+          <option value="LAINNYA">LAINNYA</option>
+          <option value="TIDAK DIKETAHUI">TIDAK DIKETAHUI</option>
+        </select>
+      </div>
 
-    <label>Vendor / Toko</label>
-    <input type="text" id="vendor" placeholder="Nama vendor">
+      <div id="bbm-fields" hidden>
+        <h3>Informasi BBM</h3>
 
-    <label>Kategori</label>
-    <select id="kategori">
-      <option value="">Pilih kategori</option>
-      <option value="BBM">BBM</option>
-      <option value="MAKAN">MAKAN</option>
-      <option value="MATERIAL">MATERIAL</option>
-      <option value="PENGINAPAN">PENGINAPAN</option>
-      <option value="TRANSPORTASI">TRANSPORTASI</option>
-      <option value="PENGIRIMAN">PENGIRIMAN</option>
-      <option value="LAINNYA">LAINNYA</option>
-      <option value="TIDAK DIKETAHUI">TIDAK DIKETAHUI</option>
-    </select>
+        <div class="form-group">
+          <label for="plat">Nomor Kendaraan</label>
+          <input type="text" id="plat" placeholder="Contoh: KT 1234 XX">
+        </div>
 
-    <div id="bbm-fields" hidden>
-      <p id="bbm-message"></p>
+        <div class="form-group">
+          <label for="kilometer">Kilometer</label>
+          <input type="text" id="kilometer" placeholder="Angka kilometer">
+        </div>
 
-      <label>Nomor Polisi Kendaraan</label>
-      <input type="text" id="plat" placeholder="Contoh: KT 1234 XX">
+        <p id="bbm-message"></p>
+      </div>
 
-      <label>Kilometer</label>
-      <input type="text" id="kilometer" placeholder="Kilometer kendaraan">
-    </div>
+      <div class="form-group">
+        <label for="kegiatan">Uraian Kegiatan</label>
+        <textarea id="kegiatan" rows="3" placeholder="Deskripsi kegiatan"></textarea>
+      </div>
 
-    <label>Kegiatan</label>
-    <input type="text" id="kegiatan" placeholder="Keterangan kegiatan">
+      <div class="form-group">
+        <label for="volume">Volume</label>
+        <input type="text" id="volume" placeholder="Volume">
+      </div>
 
-    <label>Volume</label>
-    <input type="text" id="volume" placeholder="Volume">
+      <div class="form-group">
+        <label for="harga_satuan">Harga Satuan</label>
+        <input type="text" id="harga_satuan" placeholder="Harga satuan">
+      </div>
 
-    <label>Harga Satuan</label>
-    <input type="text" id="harga_satuan" placeholder="Harga satuan">
+      <div class="form-group">
+        <label for="keterangan">Keterangan</label>
+        <textarea id="keterangan" rows="3" placeholder="Keterangan tambahan"></textarea>
+      </div>
+    </section>
 
-    <label>Keterangan</label>
-    <textarea id="keterangan" rows="3" placeholder="Keterangan tambahan"></textarea>
-  </section>
+    <section class="card">
+      <h2>3. Foto Dokumentasi Kegiatan</h2>
+      <p>Tambahkan foto sebagai bukti pelaksanaan kegiatan.</p>
 
-  <section class="panel">
-    <h2>4. Teruskan ke Telegram</h2>
-    <label>Pesan Telegram</label>
-    <textarea id="telegram-caption" rows="5"
-      placeholder="Keterangan yang akan dikirim bersama foto"></textarea>
+      <div class="button-group">
+        <button type="button" id="supporting-camera-button">Buka Kamera</button>
+        <button type="button" id="supporting-gallery-button">Pilih dari Galeri</button>
+      </div>
 
-    <button type="button" id="telegram-button" class="primary-button">
-      Teruskan Foto dan Data
-    </button>
-  </section>
+      <input type="file" id="supporting-camera" accept="image/*" capture="environment" multiple hidden>
+      <input type="file" id="supporting-gallery" accept="image/*" multiple hidden>
 
-  <p id="server-status">Menghubungkan aplikasi...</p>
+      <div id="supporting-webcam" hidden>
+        <video id="supporting-video" autoplay playsinline></video>
+        <div class="button-group">
+          <button type="button" id="supporting-take-photo">Ambil Foto</button>
+          <button type="button" id="supporting-close-camera">Tutup Kamera</button>
+        </div>
+      </div>
 
-</main>
+      <div id="supporting-preview"></div>
+      <p id="supporting-message"></p>
+    </section>
 
-<footer>
-  <p>AI Smart Expense Evidence | Telkom Akses</p>
-</footer>
+    <section class="card">
+      <h2>4. Buat Dokumen PDF</h2>
+      <p>
+        PDF dibuat dalam satu halaman A4 dan berisi foto nota,
+        foto dokumentasi kegiatan, serta uraian kegiatan.
+      </p>
+      <p>
+        Foto nota diprioritaskan. Maksimal empat foto dokumentasi
+        kegiatan akan dimasukkan agar tetap satu halaman.
+      </p>
+      <!-- Tombol PDF dibuat otomatis oleh script.js -->
+    </section>
 
-<script src="script.js"></script>
+    <section class="card">
+      <h2>5. Teruskan ke Telegram</h2>
+      <p>Periksa keterangan sebelum meneruskan dokumentasi.</p>
+
+      <div class="form-group">
+        <label for="telegram-caption">Keterangan Pesan</label>
+        <textarea
+          id="telegram-caption"
+          rows="5"
+          placeholder="Keterangan yang akan diteruskan ke Telegram"
+        ></textarea>
+      </div>
+
+      <button type="button" id="telegram-button">Teruskan ke Telegram</button>
+    </section>
+
+    <p id="server-status" role="status">Memeriksa koneksi server...</p>
+
+  </main>
+
+  <footer class="footer">
+    <p>AI Smart Expense Evidence</p>
+    <p>Telkom Akses</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script src="script.js"></script>
+
 </body>
 </html>
