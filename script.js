@@ -1,4 +1,3 @@
-
 const $ = id => document.getElementById(id);
 
 const GAS_WEB_APP_URL =
@@ -166,9 +165,6 @@ async function loadImage(file) {
 // WATERMARK TANGGAL, JAM, LOKASI
 // ===============================
 
-// Mengambil lokasi GPS perangkat.
-// Jika izin lokasi ditolak, foto tetap bisa diambil.
-
 function getCurrentLocation() {
   return new Promise(resolve => {
     if (!navigator.geolocation) {
@@ -197,8 +193,6 @@ function getCurrentLocation() {
     );
   });
 }
-
-// Membuat tulisan watermark pada foto.
 
 function drawPhotoWatermark(canvas, capturedAt, locationText) {
   const context = canvas.getContext("2d");
@@ -243,11 +237,9 @@ function drawPhotoWatermark(canvas, capturedAt, locationText) {
   const x = padding;
   const y = height - boxHeight - padding;
 
-  // Latar belakang transparan gelap
   context.fillStyle = "rgba(0, 0, 0, 0.65)";
   context.fillRect(x, y, boxWidth, boxHeight);
 
-  // Tulisan putih
   context.fillStyle = "#ffffff";
   context.textBaseline = "top";
 
@@ -268,8 +260,6 @@ function drawPhotoWatermark(canvas, capturedAt, locationText) {
   context.restore();
 }
 
-// Mengubah canvas menjadi file foto JPEG.
-
 function canvasToPhotoFile(canvas, filename) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {
@@ -288,9 +278,6 @@ function canvasToPhotoFile(canvas, filename) {
     }, "image/jpeg", 0.92);
   });
 }
-
-// Memberikan watermark pada foto dari kamera HP
-// yang masuk melalui input kamera.
 
 async function watermarkCameraFile(file) {
   const capturedAt = new Date();
@@ -486,8 +473,6 @@ async function openCamera(target) {
   }
 }
 
-// Mengambil foto dari kamera aplikasi sekaligus memberi watermark.
-
 async function takePhoto(target) {
   if (!cameraStream || activeCameraTarget !== target) {
     alert("Kamera belum aktif.");
@@ -510,7 +495,6 @@ async function takePhoto(target) {
       button.textContent = "Memproses Foto...";
     }
 
-    // Waktu dicatat saat tombol foto ditekan.
     const capturedAt = new Date();
 
     const canvas = document.createElement("canvas");
@@ -881,93 +865,32 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
 }
 
 // ===============================
-// PDF FOTO POTRET
-// NOTA BESAR DI KIRI
-// FOTO PENDUKUNG DI KANAN
+// PDF FOTO SATU PER HALAMAN
+// MENGIKUTI CONTOH evidance.pdf
 // ===============================
 
-function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight) {
-  const gap = 4;
+function drawPhotoPage(doc, image) {
+  const pageWidth = 210;
+  const pageHeight = 297;
 
-  if (images.length === 1) {
-    fitImage(
-      doc,
-      images[0],
-      margin,
-      y,
-      contentWidth,
-      contentHeight
-    );
+  const margin = 3;
 
-    return;
-  }
-
-  const leftWidth = (contentWidth - gap) * 0.52;
-  const rightWidth = contentWidth - leftWidth - gap;
+  const availableWidth = pageWidth - margin * 2;
+  const availableHeight = pageHeight - margin * 2;
 
   fitImage(
     doc,
-    images[0],
+    image,
     margin,
-    y,
-    leftWidth,
-    contentHeight
+    margin,
+    availableWidth,
+    availableHeight
   );
-
-  const remaining = images.slice(1);
-
-  const cellHeight =
-    (contentHeight - gap * (remaining.length - 1)) /
-    remaining.length;
-
-  remaining.forEach((image, index) => {
-    const photoY = y + index * (cellHeight + gap);
-
-    fitImage(
-      doc,
-      image,
-      margin + leftWidth + gap,
-      photoY,
-      rightWidth,
-      cellHeight
-    );
-  });
-}
-
-// ===============================
-// PDF FOTO LANDSCAPE
-// DUA KOLOM
-// ===============================
-
-function drawLandscapeLayout(doc, images, margin, y, contentWidth, contentHeight) {
-  const gap = 4;
-  const columns = 2;
-  const rows = Math.ceil(images.length / columns);
-
-  const cellWidth = (contentWidth - gap) / columns;
-  const cellHeight =
-    (contentHeight - gap * (rows - 1)) / rows;
-
-  images.forEach((image, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-
-    const x = margin + column * (cellWidth + gap);
-    const photoY = y + row * (cellHeight + gap);
-
-    fitImage(
-      doc,
-      image,
-      x,
-      photoY,
-      cellWidth,
-      cellHeight
-    );
-  });
 }
 
 // ===============================
 // MEMBUAT PDF FOTO SAJA
+// SETIAP FOTO SATU HALAMAN A4
 // NAMA FILE: evidance.pdf
 // ===============================
 
@@ -999,13 +922,6 @@ async function createPDF() {
 
     const doc = new jsPDF("p", "mm", "a4");
 
-    const pageWidth = 210;
-    const pageHeight = 297;
-
-    const margin = 8;
-    const contentWidth = pageWidth - margin * 2;
-    const contentHeight = pageHeight - margin * 2;
-
     const loadedImages = [];
 
     loadedImages.push(await loadImage(receiptFile));
@@ -1016,32 +932,14 @@ async function createPDF() {
       loadedImages.push(await loadImage(file));
     }
 
-    const receiptImage = loadedImages[0];
+    loadedImages.forEach((image, index) => {
+      if (index > 0) {
+        doc.addPage("a4", "portrait");
+      }
 
-    const isPortrait =
-      receiptImage.height > receiptImage.width;
+      drawPhotoPage(doc, image);
+    });
 
-    if (isPortrait) {
-      drawPortraitLayout(
-        doc,
-        loadedImages,
-        margin,
-        margin,
-        contentWidth,
-        contentHeight
-      );
-    } else {
-      drawLandscapeLayout(
-        doc,
-        loadedImages,
-        margin,
-        margin,
-        contentWidth,
-        contentHeight
-      );
-    }
-
-    // Nama file PDF selalu evidance.pdf
     doc.save("evidance.pdf");
 
     showMessage(
@@ -1236,7 +1134,6 @@ function initializeApp() {
     event.target.value = "";
   });
 
-  // Input kamera nota juga diberi watermark.
   receiptCameraInput?.addEventListener("change", async event => {
     const file = event.target.files?.[0];
 
@@ -1257,7 +1154,6 @@ function initializeApp() {
     event.target.value = "";
   });
 
-  // Input kamera foto pendukung juga diberi watermark.
   supportingCameraInput?.addEventListener("change", async event => {
     const files = Array.from(event.target.files || []);
 
