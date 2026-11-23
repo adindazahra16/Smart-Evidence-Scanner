@@ -163,6 +163,180 @@ async function loadImage(file) {
 }
 
 // ===============================
+// WATERMARK TANGGAL, JAM, LOKASI
+// ===============================
+
+// Mengambil lokasi GPS perangkat.
+// Jika izin lokasi ditolak, foto tetap bisa diambil.
+
+function getCurrentLocation() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) {
+      resolve("Lokasi tidak tersedia");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const latitude = position.coords.latitude.toFixed(5);
+        const longitude = position.coords.longitude.toFixed(5);
+
+        resolve(
+          "Lokasi GPS: " + latitude + ", " + longitude
+        );
+      },
+      error => {
+        console.warn("Lokasi GPS tidak tersedia:", error);
+        resolve("Lokasi tidak tersedia");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 0
+      }
+    );
+  });
+}
+
+// Membuat tulisan watermark pada foto.
+
+function drawPhotoWatermark(canvas, capturedAt, locationText) {
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Gagal membuat watermark.");
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const dateText = capturedAt.toLocaleDateString("id-ID");
+  const timeText = capturedAt.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+
+  const firstLine = "Tanggal: " + dateText + "  |  Jam: " + timeText;
+  const secondLine = locationText;
+
+  const fontSize = Math.max(15, Math.round(width * 0.019));
+  const padding = Math.max(12, Math.round(width * 0.015));
+  const lineHeight = fontSize * 1.5;
+
+  context.save();
+
+  context.font = "bold " + fontSize + "px Arial";
+
+  const textWidth = Math.max(
+    context.measureText(firstLine).width,
+    context.measureText(secondLine).width
+  );
+
+  const boxWidth = Math.min(
+    width - padding * 2,
+    textWidth + padding * 2
+  );
+
+  const boxHeight = lineHeight * 2 + padding * 1.5;
+
+  const x = padding;
+  const y = height - boxHeight - padding;
+
+  // Latar belakang transparan gelap
+  context.fillStyle = "rgba(0, 0, 0, 0.65)";
+  context.fillRect(x, y, boxWidth, boxHeight);
+
+  // Tulisan putih
+  context.fillStyle = "#ffffff";
+  context.textBaseline = "top";
+
+  context.fillText(
+    firstLine,
+    x + padding,
+    y + padding,
+    boxWidth - padding * 2
+  );
+
+  context.fillText(
+    secondLine,
+    x + padding,
+    y + padding + lineHeight,
+    boxWidth - padding * 2
+  );
+
+  context.restore();
+}
+
+// Mengubah canvas menjadi file foto JPEG.
+
+function canvasToPhotoFile(canvas, filename) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) {
+        reject(new Error("Gagal menyimpan foto."));
+        return;
+      }
+
+      resolve(
+        new File(
+          [blob],
+          filename,
+          { type: "image/jpeg" }
+        )
+      );
+    }, "image/jpeg", 0.92);
+  });
+}
+
+// Memberikan watermark pada foto dari kamera HP
+// yang masuk melalui input kamera.
+
+async function watermarkCameraFile(file) {
+  const capturedAt = new Date();
+
+  try {
+    const locationText = await getCurrentLocation();
+    const dataURL = await fileToDataURL(file);
+    const image = await loadBrowserImage(dataURL);
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = image.width;
+    canvas.height = image.height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return file;
+    }
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    drawPhotoWatermark(
+      canvas,
+      capturedAt,
+      locationText
+    );
+
+    return await canvasToPhotoFile(
+      canvas,
+      "foto-watermark-" + Date.now() + ".jpg"
+    );
+
+  } catch (error) {
+    console.error("Watermark gagal:", error);
+    return file;
+  }
+}
+
+// ===============================
 // PREVIEW FOTO NOTA
 // ===============================
 
@@ -312,7 +486,9 @@ async function openCamera(target) {
   }
 }
 
-function takePhoto(target) {
+// Mengambil foto dari kamera aplikasi sekaligus memberi watermark.
+
+async function takePhoto(target) {
   if (!cameraStream || activeCameraTarget !== target) {
     alert("Kamera belum aktif.");
     return;
@@ -325,29 +501,53 @@ function takePhoto(target) {
     return;
   }
 
-  const canvas = document.createElement("canvas");
+  const button = $(target + "-take-photo");
+  const originalText = button?.textContent;
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  canvas.getContext("2d").drawImage(
-    video,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  canvas.toBlob(blob => {
-    if (!blob) {
-      alert("Gagal mengambil foto.");
-      return;
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Memproses Foto...";
     }
 
-    const file = new File(
-      [blob],
-      "foto-" + Date.now() + ".jpg",
-      { type: "image/jpeg" }
+    // Waktu dicatat saat tombol foto ditekan.
+    const capturedAt = new Date();
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Gagal mengambil foto.");
+    }
+
+    context.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    showMessage(
+      "supporting-message",
+      "Memproses tanggal, jam, dan lokasi foto..."
+    );
+
+    const locationText = await getCurrentLocation();
+
+    drawPhotoWatermark(
+      canvas,
+      capturedAt,
+      locationText
+    );
+
+    const file = await canvasToPhotoFile(
+      canvas,
+      "foto-" + Date.now() + ".jpg"
     );
 
     if (target === "receipt") {
@@ -360,7 +560,16 @@ function takePhoto(target) {
 
     stopCamera();
 
-  }, "image/jpeg", 0.9);
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Gagal mengambil foto.");
+
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText || "Ambil Foto";
+    }
+  }
 }
 
 // ===============================
@@ -696,7 +905,6 @@ function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight)
   const leftWidth = (contentWidth - gap) * 0.52;
   const rightWidth = contentWidth - leftWidth - gap;
 
-  // Foto nota berukuran besar di sebelah kiri
   fitImage(
     doc,
     images[0],
@@ -706,7 +914,6 @@ function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight)
     contentHeight
   );
 
-  // Foto pendukung bertumpuk di sebelah kanan
   const remaining = images.slice(1);
 
   const cellHeight =
@@ -761,7 +968,7 @@ function drawLandscapeLayout(doc, images, margin, y, contentWidth, contentHeight
 
 // ===============================
 // MEMBUAT PDF FOTO SAJA
-// TANPA JUDUL DAN TULISAN
+// NAMA FILE: evidance.pdf
 // ===============================
 
 async function createPDF() {
@@ -790,32 +997,25 @@ async function createPDF() {
 
     const jsPDF = await loadPDFLibrary();
 
-    // Ukuran kertas A4 potret
     const doc = new jsPDF("p", "mm", "a4");
 
     const pageWidth = 210;
     const pageHeight = 297;
 
-    // Jarak tepi kertas
     const margin = 8;
-    const gap = 4;
-
     const contentWidth = pageWidth - margin * 2;
     const contentHeight = pageHeight - margin * 2;
 
-    // Foto nota menjadi foto pertama
     const loadedImages = [];
 
     loadedImages.push(await loadImage(receiptFile));
 
-    // Masukkan maksimal empat foto pendukung
     const photos = supportingFiles.slice(0, 4);
 
     for (const file of photos) {
       loadedImages.push(await loadImage(file));
     }
 
-    // Tentukan susunan berdasarkan orientasi foto nota
     const receiptImage = loadedImages[0];
 
     const isPortrait =
@@ -841,12 +1041,12 @@ async function createPDF() {
       );
     }
 
-    // Simpan PDF tanpa judul, label, atau uraian apa pun
-    doc.save("Dokumentasi-Bukti-Pengeluaran.pdf");
+    // Nama file PDF selalu evidance.pdf
+    doc.save("evidance.pdf");
 
     showMessage(
       "pdf-message",
-      "PDF foto berhasil dibuat.",
+      "PDF evidance.pdf berhasil dibuat.",
       "green"
     );
 
@@ -1036,12 +1236,17 @@ function initializeApp() {
     event.target.value = "";
   });
 
-  receiptCameraInput?.addEventListener("change", event => {
+  // Input kamera nota juga diberi watermark.
+  receiptCameraInput?.addEventListener("change", async event => {
     const file = event.target.files?.[0];
 
     if (file) {
-      receiptFile = file;
+      showMessage("scan-message", "Memproses watermark foto nota...");
+
+      receiptFile = await watermarkCameraFile(file);
       renderReceiptPreview();
+
+      showMessage("scan-message", "Foto nota siap digunakan.", "green");
     }
 
     event.target.value = "";
@@ -1052,8 +1257,23 @@ function initializeApp() {
     event.target.value = "";
   });
 
-  supportingCameraInput?.addEventListener("change", event => {
-    addSupportingFiles(event.target.files || []);
+  // Input kamera foto pendukung juga diberi watermark.
+  supportingCameraInput?.addEventListener("change", async event => {
+    const files = Array.from(event.target.files || []);
+
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+
+      showMessage(
+        "supporting-message",
+        "Memproses watermark foto dokumentasi..."
+      );
+
+      const watermarkedFile = await watermarkCameraFile(file);
+      supportingFiles.push(watermarkedFile);
+    }
+
+    renderSupportingPreview();
     event.target.value = "";
   });
 
