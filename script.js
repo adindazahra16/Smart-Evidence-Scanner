@@ -134,7 +134,7 @@ async function loadImage(file) {
   const dataURL = await fileToDataURL(file);
   const image = await loadBrowserImage(dataURL);
 
-  const maxWidth = 1400;
+  const maxWidth = 1800;
   const scale = Math.min(1, maxWidth / image.width);
 
   const canvas = document.createElement("canvas");
@@ -156,7 +156,7 @@ async function loadImage(file) {
   );
 
   return {
-    dataURL: canvas.toDataURL("image/jpeg", 0.82),
+    dataURL: canvas.toDataURL("image/jpeg", 0.88),
     width: canvas.width,
     height: canvas.height
   };
@@ -649,7 +649,7 @@ async function loadPDFLibrary() {
 }
 
 // ===============================
-// MENYESUAIKAN FOTO DALAM PDF
+// MENEMPATKAN FOTO TANPA MEMOTONG
 // ===============================
 
 function fitImage(doc, image, x, y, maxWidth, maxHeight) {
@@ -672,14 +672,13 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
 }
 
 // ===============================
-// SUSUNAN FOTO POTRET
+// PDF FOTO POTRET
+// NOTA BESAR DI KIRI
+// FOTO PENDUKUNG DI KANAN
 // ===============================
 
-function drawPortraitLayout(doc, images, margin, y, contentWidth) {
+function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight) {
   const gap = 4;
-  const leftWidth = (contentWidth - gap) * 0.52;
-  const rightWidth = contentWidth - leftWidth - gap;
-  const totalHeight = 88;
 
   if (images.length === 1) {
     fitImage(
@@ -688,30 +687,34 @@ function drawPortraitLayout(doc, images, margin, y, contentWidth) {
       margin,
       y,
       contentWidth,
-      totalHeight
+      contentHeight
     );
 
-    return totalHeight;
+    return;
   }
 
-  // Foto pertama lebih besar di sebelah kiri
+  const leftWidth = (contentWidth - gap) * 0.52;
+  const rightWidth = contentWidth - leftWidth - gap;
+
+  // Foto nota berukuran besar di sebelah kiri
   fitImage(
     doc,
     images[0],
     margin,
     y,
     leftWidth,
-    totalHeight
+    contentHeight
   );
 
-  // Foto lainnya disusun bertumpuk di sebelah kanan
+  // Foto pendukung bertumpuk di sebelah kanan
   const remaining = images.slice(1);
-  const rightCellHeight =
-    (totalHeight - gap * (remaining.length - 1)) /
+
+  const cellHeight =
+    (contentHeight - gap * (remaining.length - 1)) /
     remaining.length;
 
   remaining.forEach((image, index) => {
-    const photoY = y + index * (rightCellHeight + gap);
+    const photoY = y + index * (cellHeight + gap);
 
     fitImage(
       doc,
@@ -719,25 +722,28 @@ function drawPortraitLayout(doc, images, margin, y, contentWidth) {
       margin + leftWidth + gap,
       photoY,
       rightWidth,
-      rightCellHeight
+      cellHeight
     );
   });
-
-  return totalHeight;
 }
 
 // ===============================
-// SUSUNAN FOTO LANDSCAPE
+// PDF FOTO LANDSCAPE
+// DUA KOLOM
 // ===============================
 
-function drawLandscapeLayout(doc, images, margin, y, contentWidth) {
+function drawLandscapeLayout(doc, images, margin, y, contentWidth, contentHeight) {
   const gap = 4;
-  const cellWidth = (contentWidth - gap) / 2;
-  const cellHeight = 40;
+  const columns = 2;
+  const rows = Math.ceil(images.length / columns);
+
+  const cellWidth = (contentWidth - gap) / columns;
+  const cellHeight =
+    (contentHeight - gap * (rows - 1)) / rows;
 
   images.forEach((image, index) => {
-    const column = index % 2;
-    const row = Math.floor(index / 2);
+    const column = index % columns;
+    const row = Math.floor(index / columns);
 
     const x = margin + column * (cellWidth + gap);
     const photoY = y + row * (cellHeight + gap);
@@ -751,16 +757,14 @@ function drawLandscapeLayout(doc, images, margin, y, contentWidth) {
       cellHeight
     );
   });
-
-  return Math.ceil(images.length / 2) * (cellHeight + gap);
 }
 
 // ===============================
-// MEMBUAT PDF A4 SATU HALAMAN
+// MEMBUAT PDF FOTO SAJA
+// TANPA JUDUL DAN TULISAN
 // ===============================
 
 async function createPDF() {
-  // Validasi wajib sebelum membuat PDF
   if (!validateBBM()) return;
 
   if (!receiptFile) {
@@ -781,139 +785,68 @@ async function createPDF() {
 
     showMessage(
       "pdf-message",
-      "Menyiapkan PDF, mohon tunggu..."
+      "Menyiapkan PDF foto, mohon tunggu..."
     );
 
     const jsPDF = await loadPDFLibrary();
 
+    // Ukuran kertas A4 potret
     const doc = new jsPDF("p", "mm", "a4");
 
     const pageWidth = 210;
     const pageHeight = 297;
-    const margin = 12;
+
+    // Jarak tepi kertas
+    const margin = 8;
+    const gap = 4;
+
     const contentWidth = pageWidth - margin * 2;
+    const contentHeight = pageHeight - margin * 2;
 
-    let y = 12;
+    // Foto nota menjadi foto pertama
+    const loadedImages = [];
 
-    // Judul
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(
-      "DOKUMENTASI BUKTI PENGELUARAN",
-      margin,
-      y
-    );
+    loadedImages.push(await loadImage(receiptFile));
 
-    y += 8;
-
-    // Foto nota
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text("Foto Nota", margin, y);
-
-    y += 3;
-
-    const receiptImage = await loadImage(receiptFile);
-
-    fitImage(
-      doc,
-      receiptImage,
-      margin,
-      y,
-      contentWidth,
-      55
-    );
-
-    y += 59;
-
-    // Dokumentasi kegiatan
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Dokumentasi Kegiatan", margin, y);
-
-    y += 4;
-
+    // Masukkan maksimal empat foto pendukung
     const photos = supportingFiles.slice(0, 4);
 
-    if (photos.length) {
-      const loadedImages = [];
-
-      for (const file of photos) {
-        loadedImages.push(await loadImage(file));
-      }
-
-      // Orientasi foto pertama menentukan susunan
-      const firstImage = loadedImages[0];
-      const isPortrait =
-        firstImage.height > firstImage.width;
-
-      let usedHeight;
-
-      if (isPortrait) {
-        usedHeight = drawPortraitLayout(
-          doc,
-          loadedImages,
-          margin,
-          y,
-          contentWidth
-        );
-      } else {
-        usedHeight = drawLandscapeLayout(
-          doc,
-          loadedImages,
-          margin,
-          y,
-          contentWidth
-        );
-      }
-
-      y += usedHeight + 5;
-
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(
-        "Tidak ada foto dokumentasi kegiatan.",
-        margin,
-        y + 5
-      );
-
-      y += 12;
+    for (const file of photos) {
+      loadedImages.push(await loadImage(file));
     }
 
-    // Uraian kegiatan
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("Uraian Kegiatan", margin, y);
+    // Tentukan susunan berdasarkan orientasi foto nota
+    const receiptImage = loadedImages[0];
 
-    y += 5;
+    const isPortrait =
+      receiptImage.height > receiptImage.width;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    if (isPortrait) {
+      drawPortraitLayout(
+        doc,
+        loadedImages,
+        margin,
+        margin,
+        contentWidth,
+        contentHeight
+      );
+    } else {
+      drawLandscapeLayout(
+        doc,
+        loadedImages,
+        margin,
+        margin,
+        contentWidth,
+        contentHeight
+      );
+    }
 
-    const activity =
-      $("kegiatan")?.value?.trim() ||
-      "Uraian kegiatan belum diisi.";
-
-    const lines = doc.splitTextToSize(
-      activity,
-      contentWidth
-    );
-
-    // Pastikan uraian tidak keluar dari halaman A4
-    const availableHeight = pageHeight - margin - y;
-    const maxLines = Math.max(
-      1,
-      Math.floor(availableHeight / 4.5)
-    );
-
-    doc.text(lines.slice(0, maxLines), margin, y);
-
+    // Simpan PDF tanpa judul, label, atau uraian apa pun
     doc.save("Dokumentasi-Bukti-Pengeluaran.pdf");
 
     showMessage(
       "pdf-message",
-      "PDF berhasil dibuat.",
+      "PDF foto berhasil dibuat.",
       "green"
     );
 
@@ -958,7 +891,6 @@ function downloadFile(file, index) {
 // ===============================
 
 async function sendToTelegram() {
-  // Validasi wajib sebelum meneruskan
   if (!validateBBM()) return;
 
   const button = $("telegram-button");
