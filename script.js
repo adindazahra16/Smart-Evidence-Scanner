@@ -26,7 +26,48 @@ function showMessage(id, message, color = "") {
 
   if (color) {
     element.style.color = color;
+    element.style.fontWeight = color === "red" ? "bold" : "normal";
   }
+}
+
+// ===============================
+// VALIDASI NOTA BBM
+// ===============================
+
+function validateBBM() {
+  const category = String($("kategori")?.value || "")
+    .trim()
+    .toUpperCase();
+
+  if (category !== "BBM") return true;
+
+  const plat = $("plat")?.value?.trim() || "";
+  const kilometer = $("kilometer")?.value?.trim() || "";
+
+  const missing = [];
+
+  if (!plat) missing.push("Nomor plat wajib diisi.");
+  if (!kilometer) missing.push("Kilometer wajib diisi.");
+
+  if (missing.length) {
+    const message =
+      "DATA BBM BELUM LENGKAP! " + missing.join(" ");
+
+    showMessage("pdf-message", message, "red");
+    showMessage("telegram-message", message, "red");
+
+    alert(message);
+
+    if (!plat) {
+      $("plat")?.focus();
+    } else {
+      $("kilometer")?.focus();
+    }
+
+    return false;
+  }
+
+  return true;
 }
 
 // ===============================
@@ -49,9 +90,8 @@ function loadBrowserImage(dataURL) {
     const image = new Image();
 
     image.onload = () => resolve(image);
-    image.onerror = () => reject(
-      new Error("Foto tidak dapat dibuka.")
-    );
+    image.onerror = () =>
+      reject(new Error("Foto tidak dapat dibuka."));
 
     image.src = dataURL;
   });
@@ -333,6 +373,11 @@ function updateBBMFields() {
 
   if (fields) {
     fields.hidden = category !== "BBM";
+  }
+
+  if (category !== "BBM") {
+    showMessage("pdf-message", "");
+    showMessage("telegram-message", "");
   }
 }
 
@@ -627,10 +672,97 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
 }
 
 // ===============================
+// SUSUNAN FOTO POTRET
+// ===============================
+
+function drawPortraitLayout(doc, images, margin, y, contentWidth) {
+  const gap = 4;
+  const leftWidth = (contentWidth - gap) * 0.52;
+  const rightWidth = contentWidth - leftWidth - gap;
+  const totalHeight = 88;
+
+  if (images.length === 1) {
+    fitImage(
+      doc,
+      images[0],
+      margin,
+      y,
+      contentWidth,
+      totalHeight
+    );
+
+    return totalHeight;
+  }
+
+  // Foto pertama lebih besar di sebelah kiri
+  fitImage(
+    doc,
+    images[0],
+    margin,
+    y,
+    leftWidth,
+    totalHeight
+  );
+
+  // Foto lainnya disusun bertumpuk di sebelah kanan
+  const remaining = images.slice(1);
+  const rightCellHeight =
+    (totalHeight - gap * (remaining.length - 1)) /
+    remaining.length;
+
+  remaining.forEach((image, index) => {
+    const photoY = y + index * (rightCellHeight + gap);
+
+    fitImage(
+      doc,
+      image,
+      margin + leftWidth + gap,
+      photoY,
+      rightWidth,
+      rightCellHeight
+    );
+  });
+
+  return totalHeight;
+}
+
+// ===============================
+// SUSUNAN FOTO LANDSCAPE
+// ===============================
+
+function drawLandscapeLayout(doc, images, margin, y, contentWidth) {
+  const gap = 4;
+  const cellWidth = (contentWidth - gap) / 2;
+  const cellHeight = 40;
+
+  images.forEach((image, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+
+    const x = margin + column * (cellWidth + gap);
+    const photoY = y + row * (cellHeight + gap);
+
+    fitImage(
+      doc,
+      image,
+      x,
+      photoY,
+      cellWidth,
+      cellHeight
+    );
+  });
+
+  return Math.ceil(images.length / 2) * (cellHeight + gap);
+}
+
+// ===============================
 // MEMBUAT PDF A4 SATU HALAMAN
 // ===============================
 
 async function createPDF() {
+  // Validasi wajib sebelum membuat PDF
+  if (!validateBBM()) return;
+
   if (!receiptFile) {
     alert("Foto nota harus tersedia untuk membuat PDF.");
     return;
@@ -663,6 +795,7 @@ async function createPDF() {
 
     let y = 12;
 
+    // Judul
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.text(
@@ -673,6 +806,7 @@ async function createPDF() {
 
     y += 8;
 
+    // Foto nota
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.text("Foto Nota", margin, y);
@@ -687,11 +821,12 @@ async function createPDF() {
       margin,
       y,
       contentWidth,
-      78
+      55
     );
 
-    y += 82;
+    y += 59;
 
+    // Dokumentasi kegiatan
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.text("Dokumentasi Kegiatan", margin, y);
@@ -699,35 +834,54 @@ async function createPDF() {
     y += 4;
 
     const photos = supportingFiles.slice(0, 4);
-    const gap = 4;
-    const cellWidth = (contentWidth - gap) / 2;
-    const cellHeight = 30;
-
-    for (let i = 0; i < photos.length; i++) {
-      const image = await loadImage(photos[i]);
-
-      const column = i % 2;
-      const row = Math.floor(i / 2);
-
-      const x = margin + column * (cellWidth + gap);
-      const photoY = y + row * (cellHeight + gap);
-
-      fitImage(
-        doc,
-        image,
-        x,
-        photoY,
-        cellWidth,
-        cellHeight
-      );
-    }
 
     if (photos.length) {
-      y += 2 * (cellHeight + gap);
+      const loadedImages = [];
+
+      for (const file of photos) {
+        loadedImages.push(await loadImage(file));
+      }
+
+      // Orientasi foto pertama menentukan susunan
+      const firstImage = loadedImages[0];
+      const isPortrait =
+        firstImage.height > firstImage.width;
+
+      let usedHeight;
+
+      if (isPortrait) {
+        usedHeight = drawPortraitLayout(
+          doc,
+          loadedImages,
+          margin,
+          y,
+          contentWidth
+        );
+      } else {
+        usedHeight = drawLandscapeLayout(
+          doc,
+          loadedImages,
+          margin,
+          y,
+          contentWidth
+        );
+      }
+
+      y += usedHeight + 5;
+
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(
+        "Tidak ada foto dokumentasi kegiatan.",
+        margin,
+        y + 5
+      );
+
+      y += 12;
     }
 
-    y += 3;
-
+    // Uraian kegiatan
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.text("Uraian Kegiatan", margin, y);
@@ -746,6 +900,7 @@ async function createPDF() {
       contentWidth
     );
 
+    // Pastikan uraian tidak keluar dari halaman A4
     const availableHeight = pageHeight - margin - y;
     const maxLines = Math.max(
       1,
@@ -798,12 +953,14 @@ function downloadFile(file, index) {
   }, 15000);
 }
 
-
- // ===============================
- // SALIN KETERANGAN UNTUK TELEGRAM
- // ===============================
+// ===============================
+// SALIN KETERANGAN UNTUK TELEGRAM
+// ===============================
 
 async function sendToTelegram() {
+  // Validasi wajib sebelum meneruskan
+  if (!validateBBM()) return;
+
   const button = $("telegram-button");
 
   if (!button) {
@@ -811,7 +968,6 @@ async function sendToTelegram() {
     return;
   }
 
-  // Perbarui keterangan berdasarkan isian terbaru
   updateTelegramCaption();
 
   const captionElement = $("telegram-caption");
@@ -832,7 +988,6 @@ async function sendToTelegram() {
   try {
     let copied = false;
 
-    // Cara utama: Clipboard API
     if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(caption);
@@ -842,9 +997,9 @@ async function sendToTelegram() {
       }
     }
 
-    // Cara cadangan jika Clipboard API gagal
     if (!copied) {
-      const temporaryInput = document.createElement("textarea");
+      const temporaryInput =
+        document.createElement("textarea");
 
       temporaryInput.value = caption;
       temporaryInput.style.position = "fixed";
