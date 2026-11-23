@@ -843,6 +843,7 @@ async function loadPDFLibrary() {
 
 // ===============================
 // MENEMPATKAN FOTO TANPA MEMOTONG
+// POSISI RATA KIRI
 // ===============================
 
 function fitImage(doc, image, x, y, maxWidth, maxHeight) {
@@ -854,44 +855,108 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
   const width = image.width * ratio;
   const height = image.height * ratio;
 
+  // Foto dimulai dari sisi kiri area, tidak dipusatkan.
   doc.addImage(
     image.dataURL,
     "JPEG",
-    x + (maxWidth - width) / 2,
-    y + (maxHeight - height) / 2,
+    x,
+    y,
     width,
     height
   );
+
+  return { width, height };
 }
 
 // ===============================
-// PDF FOTO SATU PER HALAMAN
-// MENGIKUTI CONTOH evidance.pdf
+// PDF FOTO POTRET
+// FOTO PERTAMA BESAR DI KIRI
+// FOTO PENDUKUNG DI KANAN
 // ===============================
 
-function drawPhotoPage(doc, image) {
-  const pageWidth = 210;
-  const pageHeight = 297;
+function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight) {
+  const gap = 4;
 
-  const margin = 3;
+  if (!images.length) return;
 
-  const availableWidth = pageWidth - margin * 2;
-  const availableHeight = pageHeight - margin * 2;
+  if (images.length === 1) {
+    fitImage(
+      doc,
+      images[0],
+      margin,
+      y,
+      contentWidth,
+      contentHeight
+    );
+    return;
+  }
+
+  const leftWidth = (contentWidth - gap) * 0.52;
+  const rightWidth = contentWidth - leftWidth - gap;
 
   fitImage(
     doc,
-    image,
+    images[0],
     margin,
-    margin,
-    availableWidth,
-    availableHeight
+    y,
+    leftWidth,
+    contentHeight
   );
+
+  const remaining = images.slice(1);
+  const cellHeight =
+    (contentHeight - gap * (remaining.length - 1)) /
+    remaining.length;
+
+  remaining.forEach((image, index) => {
+    const photoY = y + index * (cellHeight + gap);
+
+    fitImage(
+      doc,
+      image,
+      margin + leftWidth + gap,
+      photoY,
+      rightWidth,
+      cellHeight
+    );
+  });
+}
+
+// ===============================
+// PDF FOTO LANDSCAPE
+// DUA KOLOM
+// ===============================
+
+function drawLandscapeLayout(doc, images, margin, y, contentWidth, contentHeight) {
+  if (!images.length) return;
+
+  const gap = 4;
+  const columns = 2;
+  const rows = Math.ceil(images.length / columns);
+  const cellWidth = (contentWidth - gap) / columns;
+  const cellHeight =
+    (contentHeight - gap * (rows - 1)) / rows;
+
+  images.forEach((image, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = margin + column * (cellWidth + gap);
+    const photoY = y + row * (cellHeight + gap);
+
+    fitImage(
+      doc,
+      image,
+      x,
+      photoY,
+      cellWidth,
+      cellHeight
+    );
+  });
 }
 
 // ===============================
 // MEMBUAT PDF FOTO SAJA
-// SETIAP FOTO SATU HALAMAN A4
-// NAMA FILE: evidance.pdf
+// TANPA JUDUL, LABEL, ATAU TULISAN
 // ===============================
 
 async function createPDF() {
@@ -919,26 +984,65 @@ async function createPDF() {
     );
 
     const jsPDF = await loadPDFLibrary();
-
     const doc = new jsPDF("p", "mm", "a4");
 
-    const loadedImages = [];
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 12;
+    const gap = 5;
+    const contentWidth = pageWidth - margin * 2;
+    const bottomLimit = pageHeight - margin;
 
-    loadedImages.push(await loadImage(receiptFile));
+    // Foto nota di bagian atas, maksimal setinggi 75 mm.
+    const receiptImage = await loadImage(receiptFile);
+    const receiptPlacement = fitImage(
+      doc,
+      receiptImage,
+      margin,
+      margin,
+      contentWidth,
+      75
+    );
 
+    // Foto pendukung mengikuti susunan PDF contoh pertama.
     const photos = supportingFiles.slice(0, 4);
+    const loadedImages = [];
 
     for (const file of photos) {
       loadedImages.push(await loadImage(file));
     }
 
-    loadedImages.forEach((image, index) => {
-      if (index > 0) {
-        doc.addPage("a4", "portrait");
+    if (loadedImages.length) {
+      const supportingY = margin + receiptPlacement.height + gap;
+      const availableHeight = bottomLimit - supportingY;
+
+      if (availableHeight <= 0) {
+        throw new Error("Ruang untuk foto dokumentasi tidak mencukupi.");
       }
 
-      drawPhotoPage(doc, image);
-    });
+      const isPortrait =
+        loadedImages[0].height > loadedImages[0].width;
+
+      if (isPortrait) {
+        drawPortraitLayout(
+          doc,
+          loadedImages,
+          margin,
+          supportingY,
+          contentWidth,
+          availableHeight
+        );
+      } else {
+        drawLandscapeLayout(
+          doc,
+          loadedImages,
+          margin,
+          supportingY,
+          contentWidth,
+          availableHeight
+        );
+      }
+    }
 
     doc.save("evidance.pdf");
 
