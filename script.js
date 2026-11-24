@@ -869,75 +869,27 @@ function fitImage(doc, image, x, y, maxWidth, maxHeight) {
 }
 
 // ===============================
-// PDF FOTO POTRET
-// FOTO PERTAMA BESAR DI KIRI
-// FOTO PENDUKUNG DI KANAN
+// SUSUNAN FOTO PENDUKUNG
+// UKURAN MAKSIMAL 75 MM DAN DUA KOLOM
 // ===============================
 
 function drawPortraitLayout(doc, images, margin, y, contentWidth, contentHeight) {
-  const gap = 4;
-
-  if (!images.length) return;
-
-  if (images.length === 1) {
-    fitImage(
-      doc,
-      images[0],
-      margin,
-      y,
-      contentWidth,
-      contentHeight
-    );
-    return;
-  }
-
-  const leftWidth = (contentWidth - gap) * 0.52;
-  const rightWidth = contentWidth - leftWidth - gap;
-
-  fitImage(
-    doc,
-    images[0],
-    margin,
-    y,
-    leftWidth,
-    contentHeight
-  );
-
-  const remaining = images.slice(1);
-  const cellHeight =
-    (contentHeight - gap * (remaining.length - 1)) /
-    remaining.length;
-
-  remaining.forEach((image, index) => {
-    const photoY = y + index * (cellHeight + gap);
-
-    fitImage(
-      doc,
-      image,
-      margin + leftWidth + gap,
-      photoY,
-      rightWidth,
-      cellHeight
-    );
-  });
+  drawSupportingGrid(doc, images, margin, y, contentWidth, contentHeight);
 }
 
-// ===============================
-// PDF FOTO LANDSCAPE
-// DUA KOLOM
-// ===============================
-
 function drawLandscapeLayout(doc, images, margin, y, contentWidth, contentHeight) {
-  if (!images.length) return;
+  drawSupportingGrid(doc, images, margin, y, contentWidth, contentHeight);
+}
 
+function drawSupportingGrid(doc, images, margin, y, contentWidth, contentHeight) {
   const gap = 4;
   const columns = 2;
-  const rows = Math.ceil(images.length / columns);
   const cellWidth = (contentWidth - gap) / columns;
-  const cellHeight =
-    (contentHeight - gap * (rows - 1)) / rows;
+  const cellHeight = 75;
+  const maxRows = Math.floor((contentHeight + gap) / (cellHeight + gap));
+  const maxPhotos = Math.min(images.length, maxRows * columns, 4);
 
-  images.forEach((image, index) => {
+  images.slice(0, maxPhotos).forEach((image, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
     const x = margin + column * (cellWidth + gap);
@@ -1004,7 +956,7 @@ async function createPDF() {
       75
     );
 
-    // Foto pendukung mengikuti susunan PDF contoh pertama.
+    // Foto pendukung disusun dua kolom.
     const photos = supportingFiles.slice(0, 4);
     const loadedImages = [];
 
